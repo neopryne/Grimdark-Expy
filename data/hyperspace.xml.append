@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<FTL>
+	<mod:findLike type="scripts">
+		<mod-append:script>data/gex_scripts/crew_equipment.lua</mod-append:script>
+	</mod:findLike>
+	
+	<customTabs enabled="true">
+		<tab name="crew_enhancements" windowPath="upgradeUI/Equipment/crew_enhancements_main" hasUndo="false"/>
+	</customTabs>
+</FTL>
