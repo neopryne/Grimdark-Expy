@@ -64,25 +64,34 @@ local mHoveredButton = nil
 --Basic things that are visible, but have no other features.
 --Render functions for pure objects should return false or it will break the button logic.
 local function createObject(x, y, width, height, visibilityFunction, renderFunction)
+    local object = {}
     local function renderObject()
         --print("should render? ", visibilityFunction())
-        if visibilityFunction() then
+        if object.visibilityFunction() then
             return renderFunction()
         end
     end
     
     local function getPosition()
         --print("getPosition x ", x, " y ", y)
-        return {x=x, y=y}
+        return {x=object.x, y=object.y}
     end
     
-    return {x=x, y=y, getPos=getPosition, width=width, height=height, visibilityFunction=visibilityFunction, renderFunction=renderObject}
+    object.x = x
+    object.y = x
+    object.getPos = getPosition
+    object.width = width
+    object.height = height
+    object.visibilityFunction = visibilityFunction
+    object.renderFunction = renderObject
+    return object
 end
 
 --onClick(x, y): args being passed are global position of the cursor when click occurs.
 local function buildButton(x, y, width, height, visibilityFunction, renderFunction, onClick)--todo order changed, update calls.
+    local button
     local function buttonClick(x1, y1)
-        if visibilityFunction then
+        if button.visibilityFunction then
             --todo idk if I should have this in here or out in the main render logic.
             --it's easier to find hovered things in the main render loop.
             --This version would click all hovered buttons in a stack.  That version has layering.
@@ -92,7 +101,7 @@ local function buildButton(x, y, width, height, visibilityFunction, renderFuncti
         end
     end
     
-    local button --todo make sure this gets picked up by the next function correctly, this is supposed to make it set itself as the global hovered button.
+     --todo make sure this gets picked up by the next function correctly, this is supposed to make it set itself as the global hovered button.
     local function renderObject()
         local hovering = false
         local mousePos = Hyperspace.Mouse.position
@@ -109,7 +118,7 @@ local function buildButton(x, y, width, height, visibilityFunction, renderFuncti
     end
     
     button = createObject(x, y, width, height, visibilityFunction, renderObject)
-    button[onClick] = buttonClick
+    button.onClick = buttonClick
     return button
 end
 
@@ -161,6 +170,7 @@ local function buildContainer(x, y, width, height, visibilityFunction, renderFun
         --object is only visible if partially inside container.
         local oldVisibilityFunction = object.visibilityFunction
         function containedVisibilityFunction()
+            print("Called containing vis function ")
             if ((object.getPos().x > container.getPos().x + container.width) or (object.getPos().x + object.width < container.getPos().x) or
                 (object.getPos().y > container.getPos().y + container.height) or (object.getPos().y + object.height < container.getPos().y)) then
                 return false
@@ -253,23 +263,45 @@ local b2
 local function b2Getter() return b2 end
 b2 = buildButton(0, 49, 50, 50, tabOneStandardVisibility, solidRectRenderFunction(b2Getter, Graphics.GL_Color(1, 0, 1, 1)), 
         function() print("thing dided2") end)
-local c1 = buildContainer(50, 0, 100, 100, tabOneStandardVisibility, NOOP, {b1, b2})
+local c1 
+local function c1Getter() return c1 end
+
+local b4
+local function b4Getter() return b4 end
+b4 = buildButton(400, 400, 50, 50, tabOneStandardVisibility, solidRectRenderFunction(b4Getter, Graphics.GL_Color(1, 1, 0, 1)),
+        function() print("thing dided") end)
+
+c1 = buildContainer(50, 0, 100, 100, tabOneStandardVisibility, solidRectRenderFunction(c1Getter, Graphics.GL_Color(0, 0, 1, .4)), {b1, b2})
 local b3
 local function b3Getter() return b3 end
-b3 = buildButton(300, 400, 50, 50, tabOneStandardVisibility, solidRectRenderFunction(b3Getter, Graphics.GL_Color(1, 0, 0, 1)),
+b3 = buildButton(300, 400, 25, 10, tabOneStandardVisibility, solidRectRenderFunction(b3Getter, Graphics.GL_Color(1, 0, 0, 1)),
         function() print("thing dided") end)
 
 table.insert(mTopLevelRenderList, c1)
 table.insert(mTopLevelRenderList, b3)
 
+print("b4 vis", b4.visibilityFunction())
+b4.x = 50
+b4.y = 0
+print("b4 vis2", b4.visibilityFunction())
 --local inventoryGrid = createButtonsInGrid(ENHANCEMENTS_TAB_NAME, EQUIPMENT_SUBTAB_INDEX, 50, 50, 200, 300, 40, 40, 10, 10)
 --sButtonList = lwl.tableMerge(sButtonList, inventoryGrid)
 
-
+--it's rendering regardless of visibility.  Fix this.
 
 
 --this makes the z-ordering of buttons based on the order of the sButtonList, Lower values on top.
 function renderObjects()
+    --todo test code to animate movement
+    b1.x = b1.x + 1
+    if (b1.x > 100) then
+        b1.x = 0
+    end
+    b1.y = b1.y + 1
+    if (b1.y > 202) then
+        b1.y = 0
+    end
+    print("b1x: ", b1.x, " b1posx ", b1.getPos().x, "b1vis: ", b1.visibilityFunction())
     --print("render objects")
     local hovering = false
     
