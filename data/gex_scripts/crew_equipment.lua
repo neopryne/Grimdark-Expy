@@ -5,15 +5,20 @@ local lwl = mods.lightweight_lua
 --any object capable of holding another object must have a function that passes down renderWrapping, and one for any other such operators.
 
 --[[
+tools that increase the things you can do in a scope
+tools that translate between scopes (dac, monitor, microphone, speakers)
 
 Functions are built to deal with objects (renderable).
 
-Object {x,y,height,width,visibilityFunction,renderFunction} --position is absolute on the global UI
+Object {x,y,getPos,height,width,visibilityFunction,renderFunction} --position is absolute on the global UI
 --Button {onClick, enabledFunction} --enabled tells the button if it should work or not, some buttons have different render states based on this as well.
 --Container {Objects} (Abstract, if that makes any sense.)
 ----Scroll Bar {internals={scrollUpButton, scrollDown, scrollBar, scrollCursor}}
 ----Button Group {padding?}
 
+getPos()
+    return {x=x, y=y}
+end
 
 tab_name, subtab_index-- no, this is a VISIBILITY FUNCTION
 renderFunction()
@@ -34,6 +39,7 @@ end
 --]]
 local ENHANCEMENTS_TAB_NAME = "crew_enhancements"
 local EQUIPMENT_SUBTAB_INDEX = 1
+local function NOOP() end
 
 local mTabbedWindow = ""
 local mTab = 1
@@ -42,7 +48,7 @@ local mPage = 1--used to calculate which crew are displayed in the equipment loa
 local mTopLevelRenderList = {}
 local mHoveredButton = nil
 
-
+--In order to handle partial rendering, objects would need offsets from each side, and I'm not doing that.
 --ok it's a bit involved but it's worth it and doing it right will make future scroll bars way easier.
 --basically you need to register elements (buttons) inside the scroll bar, and then as it scrolls it will update their positions.
 --also...you need to put their onRenders inside a stencil. 
@@ -65,19 +71,24 @@ local function createObject(x, y, width, height, visibilityFunction, renderFunct
         end
     end
     
-    return {x=x, y=y, width=width, height=height, visibilityFunction=visibilityFunction, renderFunction=renderObject}
+    local function getPosition()
+        --print("getPosition x ", x, " y ", y)
+        return {x=x, y=y}
+    end
+    
+    return {x=x, y=y, getPos=getPosition, width=width, height=height, visibilityFunction=visibilityFunction, renderFunction=renderObject}
 end
 
 --onClick(x, y): args being passed are global position of the cursor when click occurs.
 local function buildButton(x, y, width, height, visibilityFunction, renderFunction, onClick)--todo order changed, update calls.
-    local function buttonClick(x, y)
+    local function buttonClick(x1, y1)
         if visibilityFunction then
             --todo idk if I should have this in here or out in the main render logic.
             --it's easier to find hovered things in the main render loop.
             --This version would click all hovered buttons in a stack.  That version has layering.
             --the question is, can I get layering from an intrinsic?
             --probably not, it requires knowing about other items.
-            onClick(x, y)
+            onClick(x1, y1)
         end
     end
     
@@ -85,8 +96,8 @@ local function buildButton(x, y, width, height, visibilityFunction, renderFuncti
     local function renderObject()
         local hovering = false
         local mousePos = Hyperspace.Mouse.position
-        if mousePos.x >= button.x and mousePos.x <= button.x + button.width and
-               mousePos.y >= button.y and mousePos.y <= button.y + button.height then
+        if mousePos.x >= button.getPos().x and mousePos.x <= button.getPos().x + button.width and
+               mousePos.y >= button.getPos().y and mousePos.y <= button.getPos().y + button.height then
             hovering = true
             if not (mHoveredButton == button) then
                 print("button_hovered ", button)
@@ -102,18 +113,65 @@ local function buildButton(x, y, width, height, visibilityFunction, renderFuncti
     return button
 end
 
+--malboge, befunge, metalisp, trevino
+
 --this is the level that handles the stencil rendering adjustments.  
+--todo I don't think this handles buttons going outside of the container properly.
+--when the container moves, so should all buttons under it.  This requires hooking modifying the x/y positions of this object.
+--oh, containers automatically add their position to all objects under them each tick.
+--that solves this, but how to do that so that an object's position is still meaningful?
+--I could do 
+--If I take the limitation that you can't take something out of a container once it's inside it (kind of implicit already), then I can add a getPos() to objects that 
+--containers will modify for their contents.
+--[[
+oldGetPos = object.getPos
+object.getPos = oldGetPos + myGetPos
+--]]
+--in this way, getPos will be absolute, while x and y will be relative to whatever container an object is inside (or absolute if top level)
 local function buildContainer(x, y, width, height, visibilityFunction, renderFunction, objects)
+    local container
     --Append container rendering behavior to whatever function the user wants (if any) to show up as the container's background.
     local function renderContainer()
         renderFunction()
         local hovering = false
         --todo Render contents, shifting window to cut off everything outside it., setting hovering to true as in the tab render
+        local i = 1
+        for _, object in ipairs(objects) do
+            --print("render object"..i)
+            if object.renderFunction() then
+                hovering = true
+            end
+            i = i + 1
+        end
         
         return hovering
     end
     
-    local container = createObject(x, y, width, height, visibilityFunction, renderContainer)
+    for _, object in ipairs(objects) do
+        --adjust getPos
+        local oldGetPos = object.getPos
+        function containedGetPos()
+            local newX = container.getPos().x + oldGetPos().x
+            local newY = container.getPos().y + oldGetPos().y
+            --print("containedGetPos newX ", newX, "newy ", newY, " getPos function ", object.getPos)
+            return {x=newX, y=newY}
+        end
+        object.getPos = containedGetPos
+        --adjust visibilityFunction
+        --object is only visible if partially inside container.
+        local oldVisibilityFunction = object.visibilityFunction
+        function containedVisibilityFunction()
+            if ((object.getPos().x > container.getPos().x + container.width) or (object.getPos().x + object.width < container.getPos().x) or
+                (object.getPos().y > container.getPos().y + container.height) or (object.getPos().y + object.height < container.getPos().y)) then
+                return false
+            else
+                return oldVisibilityFunction()
+            end
+        end
+        object.visibilityFunction = containedVisibilityFunction
+    end
+    
+    container = createObject(x, y, width, height, visibilityFunction, renderContainer)
     container[objects] = objects
     return container
 end
@@ -178,12 +236,31 @@ function createButtonGridFromButtons(visibilityFunction, x, y, padding, buttons)
     
 end
 
+--needs a pointer to an object, not the object itself.
+function solidRectRenderFunction(objectGetter, glColor)
+    return function()
+        local object = objectGetter()
+        Graphics.CSurface.GL_DrawRect(object.getPos().x, object.getPos().y, object.width, object.height, glColor)
+    end
+end
 
---must contain ALL buttons  actually do I need this?
 
-table.insert(mTopLevelRenderList, buildButton(0, 0, 50, 50, tabOneStandardVisibility,
-        function() Graphics.CSurface.GL_DrawRect(0, 0, 50, 50, Graphics.GL_Color(1, 0, 0, 1)) end, 
-        function() print("thing dided") end))
+local b1
+local function b1Getter() return b1 end
+b1 = buildButton(0, 0, 50, 50, tabOneStandardVisibility, solidRectRenderFunction(b1Getter, Graphics.GL_Color(1, 0, 0, 1)),
+        function() print("thing dided") end)
+local b2
+local function b2Getter() return b2 end
+b2 = buildButton(0, 49, 50, 50, tabOneStandardVisibility, solidRectRenderFunction(b2Getter, Graphics.GL_Color(1, 0, 1, 1)), 
+        function() print("thing dided2") end)
+local c1 = buildContainer(50, 0, 100, 100, tabOneStandardVisibility, NOOP, {b1, b2})
+local b3
+local function b3Getter() return b3 end
+b3 = buildButton(300, 400, 50, 50, tabOneStandardVisibility, solidRectRenderFunction(b3Getter, Graphics.GL_Color(1, 0, 0, 1)),
+        function() print("thing dided") end)
+
+table.insert(mTopLevelRenderList, c1)
+table.insert(mTopLevelRenderList, b3)
 
 --local inventoryGrid = createButtonsInGrid(ENHANCEMENTS_TAB_NAME, EQUIPMENT_SUBTAB_INDEX, 50, 50, 200, 300, 40, 40, 10, 10)
 --sButtonList = lwl.tableMerge(sButtonList, inventoryGrid)
