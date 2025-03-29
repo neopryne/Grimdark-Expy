@@ -116,23 +116,26 @@ end
 --todo move
 --a mask is an object, so this also returns an function that returns an object.
 local function combineMasks(object1, object2)
-    local mask1 = object1.maskFunction() --in the base case, these masks are the objects themselves, and will have all properties of an object.
-    local mask2 = object2.maskFunction()
+    local maskFunction1 = object1.maskFunction --in the base case, these masks are the objects themselves, and will have all properties of an object.
+    local maskFunction2 = object2.maskFunction
     
-    local function intersectMaskFunction()
+    local function combinedMaskFunction()
+        local mask1 = maskFunction1() --in the base case, these masks are the objects themselves, and will have all properties of an object.
+        local mask2 = maskFunction2()
         local x1 = mask1.getPos().x
         local y1 = mask1.getPos().y
         local x2 = mask2.getPos().x
         local y2 = mask2.getPos().y
         local x = math.max(x1, x2)
         local y = math.max(y1, y2)
-        local width = math.min(x1 + mask1.width, x2 + mask2.width) - x
-        local height = math.min(y1 + mask1.height, y2 + mask2.height) - y
-        
-        return createObject(x, y, width, height, NOOP, NOOP)
+        local width = math.max(0, math.min(x1 + mask1.width, x2 + mask2.width) - x)
+        local height = math.max(0, math.min(y1 + mask1.height, y2 + mask2.height) - y)
+        --print("combinedMask: ", x, y, width, height, " xs ", x1, x2, " ys ", y1 , y2)
+        local combinedMask = createObject(x, y, width, height, NOOP, NOOP)
+        return combinedMask
     end
     
-    return intersectMaskFunction
+    return combinedMaskFunction
 end
 
 
@@ -161,6 +164,8 @@ local function buildContainer(x, y, width, height, visibilityFunction, renderFun
         container.maskFunction = maskFunc
         for _, object in ipairs(objects) do
             object.setMaskFunction(combineMasks(container, object))
+            object.setMaskFunction(combineMasks(container, object))
+            --object.setMaskFunction(combineMasks(container, object))
         end
     end
     
@@ -278,7 +283,8 @@ local function createVerticalScrollContainer(x, y, width, height, visibilityFunc
     
     
     contentContainer = buildContainer(0, 0, width - barWidth, height, visibilityFunction, renderContent, {content})
-    scrollContainer = buildContainer(x, y, width, height, visibilityFunction, solidRectRenderFunction(function() return scrollContainer end, Graphics.GL_Color(.2, .8, .8, .3)), {contentContainer, scrollBar, scrollUpButton, scrollDownButton, scrollNub})
+    scrollContainer = buildContainer(x, y, width, height, visibilityFunction, solidRectRenderFunction(Graphics.GL_Color(.2, .8, .8, .3)),
+        {contentContainer, scrollBar, scrollUpButton, scrollDownButton, scrollNub})
     scrollContainer.scrollValue = scrollValue
     
     return scrollContainer
@@ -358,14 +364,14 @@ local b4 = buildButton(400, 400, 50, 50, tabOneStandardVisibility, solidRectRend
         function() print("thing dided") end, NOOP)
 
 local c1 = buildContainer(20, 0, 100, 200, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(0, 0, 1, .4)), {b1, b2})
---c2 = buildContainer(50, 100, 200, 200, tabOneStandardVisibility, solidRectRenderFunction(function() return c2 end, Graphics.GL_Color(0, 0, 1, .4)), {c1})
+--c2 = buildContainer(50, 100, 200, 200, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(0, 0, 1, .4)), {c1})
 local b3 = buildButton(300, 400, 25, 10, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(1, 0, 0, 1)),
         function() print("thing dided") end, NOOP)
---[[
+
 local s1 = createVerticalScrollContainer(300, 300, 200, 100, tabOneStandardVisibility, c1)
 
-table.insert(mTopLevelRenderList, s1)--]]
-table.insert(mTopLevelRenderList, c1)
+table.insert(mTopLevelRenderList, s1)
+table.insert(mTopLevelRenderList, b3)
 --local inventoryGrid = createButtonsInGrid(ENHANCEMENTS_TAB_NAME, EQUIPMENT_SUBTAB_INDEX, 50, 50, 200, 300, 40, 40, 10, 10)
 --sButtonList = lwl.tableMerge(sButtonList, inventoryGrid)
 
@@ -382,6 +388,10 @@ function renderObjects()
     b1.y = b1.y + 1
     if (b1.y > 202) then
         b1.y = 0
+    end
+    c1.x = c1.x + 1
+    if (c1.x > 300) then
+        c1.x = 0
     end
     --print("b1x: ", b1.x, " b1posx ", b1.getPos().x, "b1vis: ", b1.visibilityFunction())
     --print("render objects")
