@@ -126,8 +126,8 @@ local function combineMasks(object1, object2)
         local y2 = mask2.getPos().y
         local x = math.max(x1, x2)
         local y = math.max(y1, y2)
-        local width = math.max(x1 + mask1.width - x2, x2 + mask2.width - x1)
-        local height = math.max(y1 + mask1.height - y2, y2 + mask2.height - y1)
+        local width = math.min(x1 + mask1.width, x2 + mask2.width) - x
+        local height = math.min(y1 + mask1.height, y2 + mask2.height) - y
         
         return createObject(x, y, width, height, NOOP, NOOP)
     end
