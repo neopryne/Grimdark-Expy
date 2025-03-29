@@ -5,8 +5,6 @@ local lwl = mods.lightweight_lua
 --any object capable of holding another object must have a function that passes down renderWrapping, and one for any other such operators.
 
 --[[
-tools that increase the things you can do in a scope
-tools that translate between scopes (dac, monitor, microphone, speakers)
 
 Functions are built to deal with objects (renderable).
 
@@ -15,27 +13,6 @@ Object {x,y,getPos,height,width,visibilityFunction,renderFunction} --position is
 --Container {Objects} (Abstract, if that makes any sense.)
 ----Scroll Bar {internals={scrollUpButton, scrollDown, scrollBar, scrollCursor}}
 ----Button Group {padding?}
-
-getPos()
-    return {x=x, y=y}
-end
-
-tab_name, subtab_index-- no, this is a VISIBILITY FUNCTION
-renderFunction()
-    if self.visibilityFunction() then
-        renderSelf()
-        renderContents()
-    end
-end
-
-onClickFunction(mousePos)
-    if self.visibilityFunction() then
-        if insideSelf(mousePos) then
-            triggerSelfFunction
-        end
-    end
-end
-
 --]]
 local ENHANCEMENTS_TAB_NAME = "crew_enhancements"
 local EQUIPMENT_SUBTAB_INDEX = 1
@@ -49,11 +26,12 @@ local mTopLevelRenderList = {}
 local mHoveredButton = nil
 local mClickedButton = nil --mouseUp will be called on this.
 
---In order to handle partial rendering, objects would need offsets from each side, and I'm not doing that.
---ok it's a bit involved but it's worth it and doing it right will make future scroll bars way easier.
---basically you need to register elements (buttons) inside the scroll bar, and then as it scrolls it will update their positions.
---also...you need to put their onRenders inside a stencil. 
---to do that, we have this wrap the functions of each button assigned to the scroll bar.
+local function isWithinMask(x, y, mask)
+    return mask and x >= mask.x and y >= mask.y and x <= mask.x + mask.w and y <= mask.y + mask.h
+end
+
+--todo the base renderFunction needs to take a mask, but I don't think any of the object versions need to, they all pass themselves as the argument to it.
+--
 
 --Define the size of the scroll window
 --Fixed size for scroll bar width and button height.
@@ -66,14 +44,14 @@ local mClickedButton = nil --mouseUp will be called on this.
 --Render functions for pure objects should return false or it will break the button logic.
 local function createObject(x, y, width, height, visibilityFunction, renderFunction)
     local object = {}
-    local function renderObject()
+    local function renderObject(mask)
         --print("should render? ", visibilityFunction())
         if not object.visibilityFunction then
             print("ERROR: vis func for object ", object.getPos().x, ", ", object.getPos().y, " is nil!")
             return true
         end
         if object.visibilityFunction() then
-            return renderFunction()
+            return renderFunction(object.maskFunction())
         end
     end
     
@@ -82,13 +60,23 @@ local function createObject(x, y, width, height, visibilityFunction, renderFunct
         return {x=object.x, y=object.y}
     end
     
+    local function maskFunctionNoOp() --mask has only x, y, width, height, can't be concave with current settings.
+        return object
+    end
+    
+    local function setMaskFunction(maskFunc)
+        object.maskFunction = maskFunc
+    end
+    
     object.x = x
     object.y = y
     object.getPos = getPosition
     object.width = width
     object.height = height
-    object.visibilityFunction = visibilityFunction
+    object.visibilityFunction = visibilityFunction --still using this for tab-based visibility, just not positonal vis.
     object.renderFunction = renderObject
+    object.setMaskFunction = setMaskFunction
+    object.maskFunction = maskFunctionNoOp --call this each frame to get the mask to pass to render func.
     return object
 end
 
@@ -99,80 +87,81 @@ local function buildButton(x, y, width, height, visibilityFunction, renderFuncti
     local button
     local function buttonClick(x1, y1)
         if button.visibilityFunction then
-            --todo idk if I should have this in here or out in the main render logic.
-            --it's easier to find hovered things in the main render loop.
-            --This version would click all hovered buttons in a stack.  That version has layering.
-            --the question is, can I get layering from an intrinsic?
-            --probably not, it requires knowing about other items.
             onClick(x1, y1)
         end
     end
     
-     --todo make sure this gets picked up by the next function correctly, this is supposed to make it set itself as the global hovered button.
-    local function renderObject()
+    local function renderButton(mask)
         local hovering = false
         local mousePos = Hyperspace.Mouse.position
-        if mousePos.x >= button.getPos().x and mousePos.x <= button.getPos().x + button.width and
-               mousePos.y >= button.getPos().y and mousePos.y <= button.getPos().y + button.height then
+        local buttonMask = button.maskFunction()
+        if mousePos.x >= buttonMask.getPos().x and mousePos.x <= buttonMask.getPos().x + buttonMask.width and
+               mousePos.y >= buttonMask.getPos().y and mousePos.y <= buttonMask.getPos().y + buttonMask.height then
             hovering = true
             if not (mHoveredButton == button) then
                 print("button_hovered ", button)
                 mHoveredButton = button
             end
         end
-        renderFunction()
+        renderFunction(button.maskFunction())
         return hovering
     end
     
-    button = createObject(x, y, width, height, visibilityFunction, renderObject)
+    button = createObject(x, y, width, height, visibilityFunction, renderButton)
     button.onClick = buttonClick
     button.onRelease = onRelease
     return button
 end
 
---malboge, befunge, metalisp, trevino
+--todo move
+--a mask is an object, so this also returns an function that returns an object.
+local function combineMasks(object1, object2)
+    local mask1 = object1.maskFunction() --in the base case, these masks are the objects themselves, and will have all properties of an object.
+    local mask2 = object2.maskFunction()
+    
+    local function intersectMaskFunction()
+        local x1 = mask1.getPos().x
+        local y1 = mask1.getPos().y
+        local x2 = mask2.getPos().x
+        local y2 = mask2.getPos().y
+        local x = math.max(x1, x2)
+        local y = math.max(y1, y2)
+        local width = math.max(x1 + mask1.width - x2, x2 + mask2.width - x1)
+        local height = math.max(y1 + mask1.height - y2, y2 + mask2.height - y1)
+        
+        return createObject(x, y, width, height, NOOP, NOOP)
+    end
+    
+    return intersectMaskFunction
+end
 
---this is the level that handles the stencil rendering adjustments.  
---todo I don't think this handles buttons going outside of the container properly.
---when the container moves, so should all buttons under it.  This requires hooking modifying the x/y positions of this object.
---oh, containers automatically add their position to all objects under them each tick.
---that solves this, but how to do that so that an object's position is still meaningful?
---I could do 
---If I take the limitation that you can't take something out of a container once it's inside it (kind of implicit already), then I can add a getPos() to objects that 
---containers will modify for their contents.
---[[
-oldGetPos = object.getPos
-object.getPos = oldGetPos + myGetPos
---]]
---in this way, getPos will be absolute, while x and y will be relative to whatever container an object is inside (or absolute if top level)
+
 local function buildContainer(x, y, width, height, visibilityFunction, renderFunction, objects)
     local container
     --Append container rendering behavior to whatever function the user wants (if any) to show up as the container's background.
-    local function renderContainer()
-        renderFunction()
+    local function renderContainer(mask)
+        renderFunction(container.maskFunction())
         local hovering = false
         --todo Render contents, shifting window to cut off everything outside it., setting hovering to true as in the tab render
         --This will obfuscate the fact that buttons are wonky near container edges, so I should TODO go back and fix this.
-        --[[Graphics.CSurface.GL_PushStencilMode()
-        Graphics.CSurface.GL_SetStencilMode(1,1,1)
-        Graphics.CSurface.GL_ClearAll()
-        Graphics.CSurface.GL_SetStencilMode(1,1,1)
-        Graphics.CSurface.GL_PushMatrix()
-        Graphics.CSurface.GL_DrawRect(container.getPos().x, container.getPos().y, container.width, container.height, Graphics.GL_Color(1, 1, 1, 1))
-        Graphics.CSurface.GL_PopMatrix()
-        Graphics.CSurface.GL_SetStencilMode(2,1,1)--]]
         
         local i = 1
         for _, object in ipairs(objects) do
             --print("render object at ", object.getPos().x, ", ", object.getPos().y)
-            if object.renderFunction() then
+            if object.renderFunction(object.maskFunction()) then
                 hovering = true
             end
             i = i + 1
         end
-        --Graphics.CSurface.GL_SetStencilMode(0,1,1)
-        --Graphics.CSurface.GL_PopStencilMode()
         return hovering
+    end
+    
+    --This should be called once the thing is created with the default maskFunction
+    local function setMaskFunction(maskFunc)
+        container.maskFunction = maskFunc
+        for _, object in ipairs(objects) do
+            object.setMaskFunction(combineMasks(container, object))
+        end
     end
     
     for _, object in ipairs(objects) do
@@ -208,6 +197,9 @@ local function buildContainer(x, y, width, height, visibilityFunction, renderFun
     
     container = createObject(x, y, width, height, visibilityFunction, renderContainer)
     container[objects] = objects
+    --pass the mask to contained objects
+    container.setMaskFunction = setMaskFunction
+    container.setMaskFunction(container.maskFunction)
     return container
 end
 
@@ -250,14 +242,14 @@ local function createVerticalScrollContainer(x, y, width, height, visibilityFunc
     --Otherwise the container bleed stacks, and you can get massive areas of clickable, unrendered buttons.
     
     scrollBar = createObject(width - barWidth, 0, barWidth, height, visibilityFunction,
-        solidRectRenderFunction(function() return scrollBar end, Graphics.GL_Color(.5, .5, .5, .8)))
+        solidRectRenderFunction(Graphics.GL_Color(.5, .5, .5, .8)))
     --TODO disable buttons if scrolling is impossible?
     scrollUpButton = buildButton(width - barWidth, 0, barWidth, barWidth, visibilityFunction,
-        solidRectRenderFunction(function() return scrollUpButton end, Graphics.GL_Color(0, 1, 1, 1)), scrollDown, NOOP)
+        solidRectRenderFunction(Graphics.GL_Color(0, 1, 1, 1)), scrollDown, NOOP)
     scrollDownButton = buildButton(width - barWidth, height - barWidth, barWidth, barWidth, visibilityFunction,
-        solidRectRenderFunction(function() return scrollDownButton end, Graphics.GL_Color(0, 1, 1, 1)), scrollUp, NOOP)
+        solidRectRenderFunction(Graphics.GL_Color(0, 1, 1, 1)), scrollUp, NOOP)
     scrollNub = buildButton(width - barWidth, barWidth, barWidth, barWidth, visibilityFunction,
-        solidRectRenderFunction(function() return scrollNub end, Graphics.GL_Color(.4, .1, 1, 1)), nubClicked, nubReleased)
+        solidRectRenderFunction(Graphics.GL_Color(.4, .1, 1, 1)), nubClicked, nubReleased)
     scrollNub.mouseTracking = false
     --TODO why does nub vanish when moving it?
     
@@ -349,43 +341,31 @@ function createButtonGridFromButtons(visibilityFunction, x, y, padding, buttons)
 end
 
 --needs a pointer to an object, not the object itself.
-function solidRectRenderFunction(objectGetter, glColor)
-    return function()
-        local object = objectGetter()
-        Graphics.CSurface.GL_DrawRect(object.getPos().x, object.getPos().y, object.width, object.height, glColor)
+function solidRectRenderFunction(glColor)
+    return function(mask)
+        Graphics.CSurface.GL_DrawRect(mask.getPos().x, mask.getPos().y, mask.width, mask.height, glColor)
     end
 end
 
 
 local b1
-b1 = buildButton(0, 0, 50, 50, tabOneStandardVisibility, solidRectRenderFunction(function() return b1 end, Graphics.GL_Color(1, 0, 0, 1)),
+b1 = buildButton(0, 0, 50, 50, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(1, 0, 0, 1)),
         function() print("thing dided") end, NOOP)
-local b2
-local function b2Getter() return b2 end
-b2 = buildButton(0, 49, 50, 50, tabOneStandardVisibility, solidRectRenderFunction(b2Getter, Graphics.GL_Color(1, 0, 1, 1)), 
+local b2 = buildButton(0, 49, 50, 50, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(1, 0, 1, 1)), 
         function() print("thing dided2") end, NOOP)
-local c1
 
-local b4
-b4 = buildButton(400, 400, 50, 50, tabOneStandardVisibility, solidRectRenderFunction(function() return b4 end, Graphics.GL_Color(1, 1, 0, 1)),
+local b4 = buildButton(400, 400, 50, 50, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(1, 1, 0, 1)),
         function() print("thing dided") end, NOOP)
 
-c1 = buildContainer(20, 0, 100, 200, tabOneStandardVisibility, solidRectRenderFunction(function() return c1 end, Graphics.GL_Color(0, 0, 1, .4)), {b1, b2})
+local c1 = buildContainer(20, 0, 100, 200, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(0, 0, 1, .4)), {b1, b2})
 --c2 = buildContainer(50, 100, 200, 200, tabOneStandardVisibility, solidRectRenderFunction(function() return c2 end, Graphics.GL_Color(0, 0, 1, .4)), {c1})
-local b3
-local function b3Getter() return b3 end
-b3 = buildButton(300, 400, 25, 10, tabOneStandardVisibility, solidRectRenderFunction(b3Getter, Graphics.GL_Color(1, 0, 0, 1)),
+local b3 = buildButton(300, 400, 25, 10, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(1, 0, 0, 1)),
         function() print("thing dided") end, NOOP)
-
+--[[
 local s1 = createVerticalScrollContainer(300, 300, 200, 100, tabOneStandardVisibility, c1)
 
-table.insert(mTopLevelRenderList, s1)
-table.insert(mTopLevelRenderList, b3)
-
-print("b4 vis", b4.visibilityFunction())
-b4.x = 50
-b4.y = 0
-print("b4 vis2", b4.visibilityFunction())
+table.insert(mTopLevelRenderList, s1)--]]
+table.insert(mTopLevelRenderList, c1)
 --local inventoryGrid = createButtonsInGrid(ENHANCEMENTS_TAB_NAME, EQUIPMENT_SUBTAB_INDEX, 50, 50, 200, 300, 40, 40, 10, 10)
 --sButtonList = lwl.tableMerge(sButtonList, inventoryGrid)
 
@@ -411,7 +391,7 @@ function renderObjects()
     local i = 1
     for _, object in ipairs(mTopLevelRenderList) do
         --print("render object"..i)
-        if object.renderFunction() then
+        if object.renderFunction(object.maskFunction()) then
             hovering = true
         end
         i = i + 1
