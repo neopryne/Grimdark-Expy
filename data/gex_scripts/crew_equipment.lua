@@ -208,6 +208,8 @@ local function buildContainer(x, y, width, height, visibilityFunction, renderFun
     return container
 end
 
+
+local SCROLL_NUB_BIGNUM = 500--todo change
 --TODO do I need to invert the render order for containers?
 
 --scroll bars are a two-leveled container.  This one goes up and down.
@@ -216,13 +218,12 @@ end
 ----scroll bar
 ----scroll nub
 ----contents (This is an object you pass in to the scroll bar, it will be cut off horiz if it's too large.)
---Contents should be a thing of variable size that can be longer than the scroll container, but not wider.
---Contents is a single item
+--Content should be a thing of variable size that can be longer than the scroll container, but not wider.
+--Content is a single item
 local function createVerticalScrollContainer(x, y, width, height, visibilityFunction, content)
-    local scrollValue = 0 --absolute position
     local barWidth = 12
     local scrollIncrement = 30
-    
+    --scrollValue is absolute position of the scroll bar.
     local scrollContainer
     local contentContainer
     local scrollBar
@@ -243,8 +244,19 @@ local function createVerticalScrollContainer(x, y, width, height, visibilityFunc
         scrollNub.mouseTracking = false
     end
     
-    --todo the render and click functions probably need to take a visibility mask that represents the part of the object inside render space.
-    --Otherwise the container bleed stacks, and you can get massive areas of clickable, unrendered buttons.
+    --TODO test scroll bar with too small thing inside.
+    --todo I don't think this math is right...  Check that scroll makes things do right numbers.
+    local function scrollToNub(scrollValue)
+        local nubMaxPos = scrollContainer.height - (barWidth + scrollNub.height)
+        local nubMinPos = barWidth
+        return scrollValue * (nubMaxPos - nubMinPos) / content.height
+    end
+    
+    local function nubToScroll(nubPosition)
+        local nubMaxPos = scrollContainer.height - (barWidth + scrollNub.height)
+        local nubMinPos = barWidth
+        return content.height * nubPosition / (nubMaxPos - nubMinPos)
+    end
     
     scrollBar = createObject(width - barWidth, 0, barWidth, height, visibilityFunction,
         solidRectRenderFunction(Graphics.GL_Color(.5, .5, .5, .8)))
@@ -256,28 +268,35 @@ local function createVerticalScrollContainer(x, y, width, height, visibilityFunc
     scrollNub = buildButton(width - barWidth, barWidth, barWidth, barWidth, visibilityFunction,
         solidRectRenderFunction(Graphics.GL_Color(.4, .1, 1, 1)), nubClicked, nubReleased)
     scrollNub.mouseTracking = false
-    --TODO why does nub vanish when moving it?
     
-    local function verticalMouseTracking()
+    --todo nub should change size based on scrollDelta, clamped to barWidth and  contentContainer.height - (barWidth * 2)
+    local function renderContent()
+        --need to fix my scrollbar math.
+        local minWindowScroll = 0
+        local maxWindowScroll = content.height - contentContainer.height
+        local scrollWindowRange = maxWindowScroll - minWindowScroll
+        --scrollbar slider size
+        scrollNub.height = scrollContainer.height * scrollWindowRange / SCROLL_NUB_BIGNUM
+        scrollNub.height = math.max(barWidth, math.min(contentContainer.height - (barWidth * 2), scrollNub.height)) 
+        local nubMaxPos = scrollContainer.height - (barWidth + scrollNub.height)
+        local nubMinPos = barWidth
+        
         if (scrollNub.mouseTracking) then
             local mousePos = Hyperspace.Mouse.position
-            local nubMaxPos = scrollContainer.y + scrollContainer.height - barWidth
-            local nubMinPos = scrollContainer.y + barWidth
-            local nubPos = math.max(nubMinPos, math.min(nubMaxPos, mousePos.y)) --clamp to bar length TODO bar length, nub size, nub centering
+            scrollNub.y = mousePos.y - scrollContainer.y
+             --clamp to bar length TODO nub centering
             --math out
-            local nubPercent = (nubPos) / (nubMaxPos - nubMinPos)
-            scrollContainer.scrollValue = nubPercent * content.height
-            print(scrollContainer.scrollValue)
+            scrollContainer.scrollValue = nubToScroll(scrollNub.y)
         end
-        scrollNub.y = scrollContainer.scrollValue
-    end
-    
-    local function renderContent()
-        local minWindowScroll = 0
-        local maxWindowScroll = scrollContainer.height - contentContainer.height
+        
+        print("scrollValue: ", scrollContainer.scrollValue, " maxValue ", maxWindowScroll) --todo one of these shouldn't be needed if I'm converting right.  the other one I think.
         scrollContainer.scrollValue = math.max(minWindowScroll, math.min(maxWindowScroll, scrollContainer.scrollValue))
-        contentContainer.x = -scrollContainer.scrollValue
-        verticalMouseTracking()
+        --TODO convert scrollValue to nubPos and apply to
+        scrollNub.y = scrollToNub(scrollContainer.scrollValue)
+        scrollNub.y = math.max(nubMinPos, math.min(nubMaxPos, scrollNub.y))
+        print("scrollValue: ", scrollContainer.scrollValue, " nubPos ", scrollNub.y, "nubMaxPos ", nubMaxPos)
+        
+        content.y = -scrollContainer.scrollValue
         --print("Rendering content level")
     end
     
@@ -285,7 +304,7 @@ local function createVerticalScrollContainer(x, y, width, height, visibilityFunc
     contentContainer = buildContainer(0, 0, width - barWidth, height, visibilityFunction, renderContent, {content})
     scrollContainer = buildContainer(x, y, width, height, visibilityFunction, solidRectRenderFunction(Graphics.GL_Color(.2, .8, .8, .3)),
         {contentContainer, scrollBar, scrollUpButton, scrollDownButton, scrollNub})
-    scrollContainer.scrollValue = scrollValue
+    scrollContainer.scrollValue = barWidth
     
     return scrollContainer
 end
