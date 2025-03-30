@@ -217,9 +217,8 @@ local SCROLL_NUB_BIGNUM = 500--todo change
 ----scroll buttons
 ----scroll bar
 ----scroll nub
-----contents (This is an object you pass in to the scroll bar, it will be cut off horiz if it's too large.)
---Content should be a thing of variable size that can be longer than the scroll container, but not wider.
---Content is a single item
+----content (This is an object you pass in to the scroll bar, it will be cut off horiz if it's too large.)
+--Content is a single item with a y coordinate of 0. It can have variable size, and can be longer than the scroll container, but not wider.
 local function createVerticalScrollContainer(x, y, width, height, visibilityFunction, content)
     local barWidth = 12
     local scrollIncrement = 30
@@ -237,25 +236,38 @@ local function createVerticalScrollContainer(x, y, width, height, visibilityFunc
         scrollContainer.scrollValue = scrollContainer.scrollValue - scrollIncrement
     end
     
-    local function nubClicked()
+    local function nubClicked(x, y)
         scrollNub.mouseTracking = true
+        scrollNub.mouseOffset = y - scrollNub.getPos().y
     end
     local function nubReleased()
         scrollNub.mouseTracking = false
     end
     
+    local function nubMinPos()
+        return barWidth
+    end
+        
+    local function nubMaxPos()
+        return math.max(nubMinPos(), scrollContainer.height - (barWidth + scrollNub.height))
+    end
+    
+    local function minWindowScroll()
+        return 0
+    end
+    
+    local function maxWindowScroll()
+        return math.max(minWindowScroll(), content.height - contentContainer.height)
+    end
+    
     --TODO test scroll bar with too small thing inside.
     --todo I don't think this math is right...  Check that scroll makes things do right numbers.
     local function scrollToNub(scrollValue)
-        local nubMaxPos = scrollContainer.height - (barWidth + scrollNub.height)
-        local nubMinPos = barWidth
-        return scrollValue * (nubMaxPos - nubMinPos) / content.height
+        return nubMinPos() + ((scrollValue - minWindowScroll()) / math.max(1, (maxWindowScroll() - minWindowScroll())) * (nubMaxPos() - nubMinPos()))
     end
     
     local function nubToScroll(nubPosition)
-        local nubMaxPos = scrollContainer.height - (barWidth + scrollNub.height)
-        local nubMinPos = barWidth
-        return content.height * nubPosition / (nubMaxPos - nubMinPos)
+        return minWindowScroll() + ((nubPosition - nubMinPos()) / math.max(1, (nubMaxPos() - nubMinPos())) * (maxWindowScroll() - minWindowScroll()))
     end
     
     scrollBar = createObject(width - barWidth, 0, barWidth, height, visibilityFunction,
@@ -272,29 +284,25 @@ local function createVerticalScrollContainer(x, y, width, height, visibilityFunc
     --todo nub should change size based on scrollDelta, clamped to barWidth and  contentContainer.height - (barWidth * 2)
     local function renderContent()
         --need to fix my scrollbar math.
-        local minWindowScroll = 0
-        local maxWindowScroll = content.height - contentContainer.height
-        local scrollWindowRange = maxWindowScroll - minWindowScroll
-        --scrollbar slider size
-        scrollNub.height = scrollContainer.height * scrollWindowRange / SCROLL_NUB_BIGNUM
-        scrollNub.height = math.max(barWidth, math.min(contentContainer.height - (barWidth * 2), scrollNub.height)) 
-        local nubMaxPos = scrollContainer.height - (barWidth + scrollNub.height)
-        local nubMinPos = barWidth
+        local scrollWindowRange = maxWindowScroll() - minWindowScroll()
+        --scrollbar slider size TODO fix this math too.
+        scrollNub.height = scrollContainer.height / math.max(1, scrollWindowRange)
+        scrollNub.height = math.max(barWidth, math.min(contentContainer.height - (barWidth * 2), scrollNub.height))
         
         if (scrollNub.mouseTracking) then
             local mousePos = Hyperspace.Mouse.position
-            scrollNub.y = mousePos.y - scrollContainer.y
+            scrollNub.y = mousePos.y - scrollContainer.y - scrollNub.mouseOffset
              --clamp to bar length TODO nub centering
             --math out
             scrollContainer.scrollValue = nubToScroll(scrollNub.y)
         end
         
-        print("scrollValue: ", scrollContainer.scrollValue, " maxValue ", maxWindowScroll) --todo one of these shouldn't be needed if I'm converting right.  the other one I think.
-        scrollContainer.scrollValue = math.max(minWindowScroll, math.min(maxWindowScroll, scrollContainer.scrollValue))
+        print("scrollValue: ", scrollContainer.scrollValue, " maxValue ", maxWindowScroll()) --todo one of these shouldn't be needed if I'm converting right.  the other one I think.
+        scrollContainer.scrollValue = math.max(minWindowScroll(), math.min(maxWindowScroll(), scrollContainer.scrollValue))
         --TODO convert scrollValue to nubPos and apply to
         scrollNub.y = scrollToNub(scrollContainer.scrollValue)
-        scrollNub.y = math.max(nubMinPos, math.min(nubMaxPos, scrollNub.y))
-        print("scrollValue: ", scrollContainer.scrollValue, " nubPos ", scrollNub.y, "nubMaxPos ", nubMaxPos)
+        --scrollNub.y = math.max(nubMinPos(), math.min(nubMaxPos(), scrollNub.y))
+        print("scrollValue: ", scrollContainer.scrollValue, " nubPos ", scrollNub.y, "nubMaxPos ", nubMaxPos())
         
         content.y = -scrollContainer.scrollValue
         --print("Rendering content level")
@@ -365,6 +373,7 @@ function createButtonGridFromButtons(visibilityFunction, x, y, padding, buttons)
     
 end
 
+--hey uh b1 was only moving horiz when I direct registered it to a scroll bar.
 --needs a pointer to an object, not the object itself.
 function solidRectRenderFunction(glColor)
     return function(mask)
@@ -407,10 +416,6 @@ function renderObjects()
     b1.y = b1.y + 1
     if (b1.y > 202) then
         b1.y = 0
-    end
-    c1.x = c1.x + 1
-    if (c1.x > 300) then
-        c1.x = 0
     end
     --print("b1x: ", b1.x, " b1posx ", b1.getPos().x, "b1vis: ", b1.visibilityFunction())
     --print("render objects")
