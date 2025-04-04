@@ -6,6 +6,8 @@ local lwl = mods.lightweight_lua
 --any object capable of holding another object must have a function that passes down renderWrapping, and one for any other such operators.
 --todo I broke everything somehow
 
+
+
 --[[
 
 Functions are built to deal with objects (renderable).
@@ -474,12 +476,13 @@ table.insert(mTopLevelRenderList, b3)
 
 --uh a function that takes some saved states about a button and transfers it to the mouse kind of not really, just puts it in a semi-state where releasing on another iButton will put it in that one.
 
-local function inventoryStorageFunctionGeneric(item)
+
+local function inventoryStorageFunctionAny(item)
     return true
 end
 
-local function inventoryStorageFunctionEqipment(item)
-    return (item.type == TYPE_EQUIPMENT)
+local function inventoryStorageFunctionWeapon(item)
+    return (item.type == TYPE_WEAPON)
 end
 
 local function inventoryStorageFunctionArmor(item)
@@ -490,6 +493,11 @@ local function inventoryStorageFunctionTool(item)
     return (item.type == TYPE_TOOL)
 end
 
+local function inventoryStorageFunctionEquipment(item)
+    return inventoryStorageFunctionWeapon(item) or 
+            inventoryStorageFunctionArmor(item) or inventoryStorageFunctionTool(item)
+end
+
 --[[
 Items are tables with the following properties
 
@@ -497,17 +505,37 @@ type: describes what kind of thing the item is, used for determing which invento
 name: what exactly you have stored in that slot.
 renderFunction: hopefully a png that's the same size as their button.
 
+todo iterate through items attached to people.  This is probably a property of the people list, not the item.
+The name of the item is for lookup in the mechanical table of items.
+A mechanical item knows lots of things about itself, and maybe is important for lots of stuff.
 
 --]]
 
 --visibility function inherited from the button they're attached to.
-local function createItem(name, itemType, renderFunction)
+--containingButton is the inventoryButton that holds this item.  render won't be called if this is nil as said button is the thing that calls it.
+local function createItem(name, itemType, width, height, visibilityFunction, renderFunction)
+    local item
+    local function itemRender()
+        if (item.trackMouse) then
+            local mousePos = Hyperspace.Mouse.position
+            item.x = mousePos.x
+            item.y = mousePos.y
+        else
+            item.x = containingButton.getPos().x
+            item.y = containingButton.getPos().y
+        end
+        renderFunction()
+    end
     
-    return {name=name, itemType=itemType, renderFunction=renderFunction}
+    item = createObject(0, 0, width, height, visibilityFunction, itemRender)
+    item.name = name
+    item.itemType = itemType
+    return item
 end
 
 
 --I might actually put this in the UI library, it's pretty useful.
+--todo is this also a container for the item?
 local function createInventoryButton(name, x, y, height, width, visibilityFunction, renderFunction, allowedItemsFunction)
     --todo custom logic has to go somewhere else, as these need to work even when the button isn't rendered.
     local button
@@ -532,12 +560,18 @@ local function createInventoryButton(name, x, y, height, width, visibilityFuncti
         end
         if allowedItemsFunction(item) then
             button.item = item
+            item.containingButton = button
             return true
         end
         return false
     end
     
-    button = buildButton(x, y, height, width, visibilityFunction, renderFunction, onClick, onRelease)
+    local function buttonRender()
+        button.renderFunction()
+        item.renderFunction()
+    end
+    
+    button = buildButton(x, y, height, width, visibilityFunction, buttonRender, onClick, onRelease)
     button.addItem = addItem
     button.allowedItemsFunction = allowedItemsFunction
     
@@ -556,6 +590,9 @@ local function buildCrewEquipmentScrollBar()
     return crewScrollBar
 end
 
+
+--
+local three_way = createItem("Three-Way", TYPE_WEAPON, 30, 30, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(1, 1, .8, 1)))
 
 
 --this makes the z-ordering of buttons based on the order of the sButtonList, Lower values on top.
