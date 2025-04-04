@@ -458,15 +458,15 @@ local function inventoryStorageFunctionAny(item)
 end
 
 local function inventoryStorageFunctionWeapon(item)
-    return (item.type == TYPE_WEAPON)
+    return (item.itemType == TYPE_WEAPON)
 end
 
 local function inventoryStorageFunctionArmor(item)
-    return (item.type == TYPE_ARMOR)
+    return (item.itemType == TYPE_ARMOR)
 end
 
 local function inventoryStorageFunctionTool(item)
-    return (item.type == TYPE_TOOL)
+    return (item.itemType == TYPE_TOOL)
 end
 
 local function inventoryStorageFunctionEquipment(item)
@@ -477,7 +477,7 @@ end
 --[[
 Items are tables with the following properties
 
-type: describes what kind of thing the item is, used for determing which inventory buttons can hold which kinds of items.
+itemType: describes what kind of thing the item is, used for determing which inventory buttons can hold which kinds of items. (type is a reserved word)
 name: what exactly you have stored in that slot.
 renderFunction: hopefully a png that's the same size as their button.
 
@@ -498,8 +498,8 @@ local function createItem(name, itemType, width, height, visibilityFunction, ren
             item.x = mousePos.x
             item.y = mousePos.y
         else
-            item.x = containingButton.getPos().x
-            item.y = containingButton.getPos().y
+            item.x = item.containingButton.getPos().x
+            item.y = item.containingButton.getPos().y
         end
         renderFunction(item.maskFunction())
     end
@@ -523,35 +523,43 @@ local function createInventoryButton(name, x, y, height, width, visibilityFuncti
     local button
     
     local function onClick()
-        button.item.trackMouse = true
+        if (button.item) then
+            button.item.trackMouse = true
+        end
     end
     
     local function onRelease()
         local mousePos = Hyperspace.Mouse.position
-        button.item.trackMouse = false
-        if (mHoveredButton and mHoveredButton.addItem) then
-            if (mHoveredButton.addItem(button.item)) then
-                button.item = nil
+        if (button.item) then
+            button.item.trackMouse = false
+            if (mHoveredButton and mHoveredButton.addItem) then
+                if (mHoveredButton.addItem(button.item)) then
+                    button.item = nil
+                end
             end
         end
     end
     
     local function addItem(item)
         if button.item then
+            print("iButton already contains ", button.item.name)
             return false
         end
         if allowedItemsFunction(item) then
             button.item = item
             item.containingButton = button
+            print("added item ",  button.item.name)
             return true
         end
+        print("item type not allowed.")
         return false
     end
     
     local function buttonRender()
         renderFunction(button.maskFunction())
         if (button.item) then
-            button.item.renderFunction(item.maskFunction())
+            print("rendering item ", button.item.name)
+            button.item.renderFunction(button.item.maskFunction())
         end
     end
     
@@ -579,13 +587,13 @@ end
 
 local EQUIPMENT_ICON_SIZE = 30
 
---[[local three_way = createItem("Three-Way", TYPE_WEAPON, EQUIPMENT_ICON_SIZE, EQUIPMENT_ICON_SIZE, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(1, 1, .8, 1)),
+local three_way = createItem("Three-Way", TYPE_WEAPON, EQUIPMENT_ICON_SIZE, EQUIPMENT_ICON_SIZE, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(1, 1, .8, 1)),
         "Hit two more people at the cost of decreased damage.", NOOP, NOOP)
 local seal_head = createItem("Seal Head", TYPE_ARMOR, EQUIPMENT_ICON_SIZE, EQUIPMENT_ICON_SIZE, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(1, .8, 1, 1)),
         "The headbutts it enables are an effective counter to and ridicule you might come under from wearing such odd headgear.", NOOP, NOOP)
 local netgear = createItem("Three-Way", TYPE_TOOL, EQUIPMENT_ICON_SIZE, EQUIPMENT_ICON_SIZE, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(.8, 1, 1, 1)),
         "It's gear made of nets.  Also serves as a wireless access point. Cooldown: two minutes.  Deploy nets in a room to slow all movement through it for twenty five seconds by 60%.  Single use for some reason.", NOOP, NOOP)
-        --]]
+        
 --[[
     Description: "It's gear made of nets.  Also serves as a wireless access point.
     Cooldown: two minutes.  Deploy nets in a room to slow all movement through it for twenty five seconds by 60%.  Single use for some reason."
@@ -609,7 +617,7 @@ local ib1 = createInventoryButton(name, 300, 30, EQUIPMENT_ICON_SIZE + 2, EQUIPM
     solidRectRenderFunction(Graphics.GL_Color(1, .5, 0, 1)), inventoryStorageFunctionEquipment)
 local ib2 = createInventoryButton(name, 0, 0, EQUIPMENT_ICON_SIZE + 2, EQUIPMENT_ICON_SIZE + 2, tabOneStandardVisibility,
     solidRectRenderFunction(Graphics.GL_Color(1, .5, 0, 1)), inventoryStorageFunctionEquipment)
---ib1.addItem(seal_head)
+ib1.addItem(seal_head)
 
 
 local b1
@@ -621,7 +629,7 @@ local b2 = buildButton(0, 49, 50, 50, tabOneStandardVisibility, solidRectRenderF
 local b4 = buildButton(400, 400, 50, 50, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(1, 1, 0, 1)),
         function() print("thing dided") end, NOOP)
 
-local c1 = buildContainer(20, 0, 100, 200, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(0, 0, 1, .4)), {b1, b2}, false)
+local c1 = buildContainer(20, 0, 100, 200, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(0, 0, 1, .4)), {ib2}, false)
 --c2 = buildContainer(50, 100, 200, 200, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(0, 0, 1, .4)), {c1})
 local b3 = buildButton(300, 400, 25, 10, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(1, 0, 0, 1)),
         function() print("thing dided") end, NOOP)
