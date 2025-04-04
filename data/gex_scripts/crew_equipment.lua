@@ -599,10 +599,12 @@ end
 
 --Internal fields:  text, what this will display.  I could do something clever where it tries to shrink the font size if it's too big, or another thing where I only put these inside scroll windows which would be pretty clever.
 --This needs to set its height dynamically and be used inside a scroll bar, or change font size dynamically.
-local function createTextBox(x, y, height, width, visibilityFunction, fontSize)
+--This one actually is local, the other ones are what I'll expose for use.
+local function createTextBox(x, y, height, width, visibilityFunction, renderFunction, fontSize)
     local textBox
     
     local function renderText(mask)
+        renderFunction()
         --todo stencil this out, text has no interactivity so it's fine. based on mask.
         Graphics.CSurface.GL_PushStencilMode()
         Graphics.CSurface.GL_SetStencilMode(1,1,1)
@@ -625,6 +627,48 @@ local function createTextBox(x, y, height, width, visibilityFunction, fontSize)
     return textBox
 end
 
+
+--You can put this one inside of a scroll window for good effect
+local function createExpandingTextBox(x, y, height, width, visibilityFunction, fontSize)
+    
+    
+    
+end
+
+
+local MIN_FONT_SIZE = 5
+
+--Just shortcuts the above strategy
+--local function createScrollingTextBox(x, y, height, width, visibilityFunction, fontSize)
+
+--Font shrinks to accomidate text, I don't think this one looks as good generally, but I wanted to make it available.
+local function createFixedTextBox(x, y, height, width, visibilityFunction, maxFontSize)
+    local textBox
+    local function scalingFontRenderFunction()
+        textBox.text = textBox.text.."f"
+        if (#textBox.text > textBox.lastLength) then
+            textBox.lastLength = #textBox.text
+            --check if reduction needed
+            --print offscreen to avoid clutter
+            while ((textBox.fontSize > MIN_FONT_SIZE) and
+                    (Graphics.freetype.easy_printAutoNewlines(textBox.fontSize, 5000, textBox.getPos().y, textBox.width, textBox.text).y > textBox.getPos().y + textBox.height)) do
+                textBox.fontSize = textBox.fontSize - 1
+            end
+        elseif (#textBox.text < textBox.lastLength) then
+            textBox.lastLength = #textBox.text
+            --check if we can increase size
+            while ((textBox.fontSize < textBox.maxFontSize) and
+                    (Graphics.freetype.easy_printAutoNewlines(textBox.fontSize, 5000, textBox.getPos().y, textBox.width, textBox.text).y < textBox.getPos().y + textBox.height)) do
+                textBox.fontSize = textBox.fontSize + 1
+            end
+        end
+    end
+    
+    textBox = createTextBox(x, y, height, width, visibilityFunction, scalingFontRenderFunction, maxFontSize)
+    textBox.maxFontSize = maxFontSize
+    textBox.lastLength = #textBox.text
+    return textBox
+end
 
 
 --In the crew loop, each crew will check the items assigned to them and call their onTick functions, (pass themselves in?)
@@ -665,9 +709,9 @@ local ib1 = createInventoryButton(name, 300, 30, EQUIPMENT_ICON_SIZE + 2, EQUIPM
 local ib2 = createInventoryButton(name, 0, 0, EQUIPMENT_ICON_SIZE + 2, EQUIPMENT_ICON_SIZE + 2, tabOneStandardVisibility,
     solidRectRenderFunction(Graphics.GL_Color(1, .5, 0, 1)), inventoryStorageFunctionEquipment)
 ib1.addItem(seal_head)
-local t1 = createTextBox(400, 40, 60, 90, tabOneStandardVisibility, 8)
+local t1 = createFixedTextBox(400, 40, 60, 90, tabOneStandardVisibility, 20)
 local longString = "Ok so this is a pretty long text box that's probably going to overflow the bounds of the text that created it lorum donor kit mama, consecutur rivus alterna nunc provinciamus."
-t1.text = longString
+--t1.text = longString
 
 local b1
 b1 = buildButton(0, 0, 50, 50, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(1, 0, 0, 1)),
