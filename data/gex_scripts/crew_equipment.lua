@@ -27,6 +27,9 @@ scroll buttons must be square.  That's the law, it will throw you an error other
 --]]
 local ENHANCEMENTS_TAB_NAME = "crew_enhancements"
 local EQUIPMENT_SUBTAB_INDEX = 1
+local TYPE_WEAPON = "type_weapon"
+local TYPE_ARMOR = "type_armor"
+local TYPE_TOOL = "type_tool"
 local function NOOP() end
 
 local function isWithinMask(mousePos, mask)
@@ -215,7 +218,7 @@ local function buildContainer(x, y, width, height, visibilityFunction, renderFun
     
     --This should be called once the thing is created with the default maskFunction
     local function setMaskFunction(maskFunc)
-        --TODO uncomment if container.renderOutsideBounds then return end
+        if container.renderOutsideBounds then return end
         container.maskFunction = maskFunc
         for _, object in ipairs(objects) do
             object.setMaskFunction(combineMasks(container, object))
@@ -239,7 +242,7 @@ local function buildContainer(x, y, width, height, visibilityFunction, renderFun
         local oldVisibilityFunction = object.visibilityFunction
         function containedVisibilityFunction()
             local retVal = false
-            --TODO uncomment if container.renderOutsideBounds then return true end
+            if container.renderOutsideBounds then return true end
             if ((object.getPos().x > container.getPos().x + container.width) or (object.getPos().x + object.width < container.getPos().x) or
                 (object.getPos().y > container.getPos().y + container.height) or (object.getPos().y + object.height < container.getPos().y)) then
                 retVal = false
@@ -274,9 +277,9 @@ local function buildContainer(x, y, width, height, visibilityFunction, renderFun
     container[objects] = objects
     container.addObject = addObject 
     --pass the mask to contained objects
+    container.renderOutsideBounds = renderOutsideBounds
     container.setMaskFunction = setMaskFunction
     container.setMaskFunction(container.maskFunction)
-    container.renderOutsideBounds = renderOutsideBounds
     return container
 end
 
@@ -392,9 +395,9 @@ local function createVerticalScrollContainer(x, y, width, height, visibilityFunc
     end
     
     
-    contentContainer = buildContainer(0, 0, width - barWidth, height, visibilityFunction, renderContent, {content}, true)
+    contentContainer = buildContainer(0, 0, width - barWidth, height, visibilityFunction, renderContent, {content}, false)
     scrollContainer = buildContainer(x, y, width, height, visibilityFunction, solidRectRenderFunction(Graphics.GL_Color(.2, .8, .8, .3)),
-        {contentContainer, scrollBar, scrollUpButton, scrollDownButton, scrollNub}, true)
+        {contentContainer, scrollBar, scrollUpButton, scrollDownButton, scrollNub}, false)
     scrollContainer.scrollValue = barWidth
     scrollContainer.scrollUp = scrollUp
     scrollContainer.scrollDown = scrollDown
@@ -507,7 +510,7 @@ end
 --I might actually put this in the UI library, it's pretty useful.
 local function createInventoryButton(name, x, y, height, width, visibilityFunction, renderFunction, allowedItemsFunction)
     --todo custom logic has to go somewhere else, as these need to work even when the button isn't rendered.
-    local button =
+    local button
     
     local function onClick()
         button.item.trackMouse = true
