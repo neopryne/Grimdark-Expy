@@ -490,6 +490,7 @@ A mechanical item knows lots of things about itself, and maybe is important for 
 --visibility function inherited from the button they're attached to.
 --containingButton is the inventoryButton that holds this item.  render won't be called if this is nil as said button is the thing that calls it.
 --onTick takes no arguments, onCreate is passed the item being created so it can modify it.
+--TODO needs two mask functions, one for when it's being held, and its mask is itself.  One for when it is not being held, and its mask is its containing button's mask.
 local function createItem(name, itemType, width, height, visibilityFunction, renderFunction, description, onCreate, onTick)
     local item
     local function itemRender()
@@ -504,12 +505,22 @@ local function createItem(name, itemType, width, height, visibilityFunction, ren
         renderFunction(item.maskFunction())
     end
     
+    local function itemMask()
+        if item.trackMouse then
+            return item
+        else
+            --This works because items only render when attached to an intentoryButton, so it will never be nil here.
+            return item.containingButton.maskFunction()
+        end
+    end
+    
     item = createObject(0, 0, width, height, visibilityFunction, itemRender)
     item.name = name
     item.itemType = itemType
     item.description = description
     item.onCreate = onCreate
     item.onTick = onTick
+    item.maskFunction = itemMask
     
     item.onCreate(item)
     return item
@@ -558,7 +569,7 @@ local function createInventoryButton(name, x, y, height, width, visibilityFuncti
     local function buttonRender()
         renderFunction(button.maskFunction())
         if (button.item) then
-            print("rendering item ", button.item.name)
+            --print("rendering item ", button.item.name)
             button.item.renderFunction(button.item.maskFunction())
         end
     end
@@ -581,6 +592,40 @@ local function buildCrewEquipmentScrollBar()
     return crewScrollBar
 end
 
+--todo some kind of typewriter print function you can pass in to text boxes.
+--No actually it's just a field they have.
+
+--todo some kind of a text box.  easy_printAutoNewlines lets me contstrain width, probably need a stencil for height.
+
+--Internal fields:  text, what this will display.  I could do something clever where it tries to shrink the font size if it's too big, or another thing where I only put these inside scroll windows which would be pretty clever.
+--This needs to set its height dynamically and be used inside a scroll bar, or change font size dynamically.
+local function createTextBox(x, y, height, width, visibilityFunction, fontSize)
+    local textBox
+    
+    local function renderText(mask)
+        --todo stencil this out, text has no interactivity so it's fine. based on mask.
+        Graphics.CSurface.GL_PushStencilMode()
+        Graphics.CSurface.GL_SetStencilMode(1,1,1)
+        Graphics.CSurface.GL_ClearAll()
+        Graphics.CSurface.GL_SetStencilMode(1,1,1)
+        Graphics.CSurface.GL_PushMatrix()
+        Graphics.CSurface.GL_DrawRect(textBox.getPos().x, textBox.getPos().y, textBox.width, textBox.height, Graphics.GL_Color(1, 1, 1, 1))
+        Graphics.CSurface.GL_PopMatrix()
+        Graphics.CSurface.GL_SetStencilMode(2,1,1)
+        
+        local lowestY = Graphics.freetype.easy_printAutoNewlines(textBox.fontSize, textBox.getPos().x, textBox.getPos().y, textBox.width, textBox.text)
+        --textBox.height = lowestY - textBox.getPos().y --only if this is for in scroll bars.
+        Graphics.CSurface.GL_SetStencilMode(0,1,1)
+        Graphics.CSurface.GL_PopStencilMode()
+    end
+    
+    textBox = createObject(x, y, height, width, visibilityFunction, renderText)
+    textBox.text = ""
+    textBox.fontSize = fontSize
+    return textBox
+end
+
+
 
 --In the crew loop, each crew will check the items assigned to them and call their onTick functions, (pass themselves in?)
 --It is the job of the items to do everything wrt their functionality.
@@ -595,8 +640,6 @@ local netgear = createItem("Three-Way", TYPE_TOOL, EQUIPMENT_ICON_SIZE, EQUIPMEN
         "It's gear made of nets.  Also serves as a wireless access point. Cooldown: two minutes.  Deploy nets in a room to slow all movement through it for twenty five seconds by 60%.  Single use for some reason.", NOOP, NOOP)
         
 --[[
-    Description: "It's gear made of nets.  Also serves as a wireless access point.
-    Cooldown: two minutes.  Deploy nets in a room to slow all movement through it for twenty five seconds by 60%.  Single use for some reason."
     onCreate()
         --set up variables specific to this object's implementation.  Check that this is actually a good way of doing this, vs decoupling the object instance from the logic it uses
         --That version would involve each crewmem looking up their equipped items in the persisted values, and is probably better as a first guess at what a good model looks like.
@@ -613,12 +656,18 @@ local netgear = createItem("Three-Way", TYPE_TOOL, EQUIPMENT_ICON_SIZE, EQUIPMEN
 --]]
 
 
+
+
+
+
 local ib1 = createInventoryButton(name, 300, 30, EQUIPMENT_ICON_SIZE + 2, EQUIPMENT_ICON_SIZE + 2, tabOneStandardVisibility,
     solidRectRenderFunction(Graphics.GL_Color(1, .5, 0, 1)), inventoryStorageFunctionEquipment)
 local ib2 = createInventoryButton(name, 0, 0, EQUIPMENT_ICON_SIZE + 2, EQUIPMENT_ICON_SIZE + 2, tabOneStandardVisibility,
     solidRectRenderFunction(Graphics.GL_Color(1, .5, 0, 1)), inventoryStorageFunctionEquipment)
 ib1.addItem(seal_head)
-
+local t1 = createTextBox(400, 40, 60, 90, tabOneStandardVisibility, 8)
+local longString = "Ok so this is a pretty long text box that's probably going to overflow the bounds of the text that created it lorum donor kit mama, consecutur rivus alterna nunc provinciamus."
+t1.text = longString
 
 local b1
 b1 = buildButton(0, 0, 50, 50, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(1, 0, 0, 1)),
@@ -639,12 +688,9 @@ local s1 = createVerticalScrollContainer(300, 300, 200, 100, tabOneStandardVisib
 table.insert(mTopLevelRenderList, s1)
 table.insert(mTopLevelRenderList, b3)
 table.insert(mTopLevelRenderList, ib1)
+table.insert(mTopLevelRenderList, t1)
 --local inventoryGrid = createButtonsInGrid(ENHANCEMENTS_TAB_NAME, EQUIPMENT_SUBTAB_INDEX, 50, 50, 200, 300, 40, 40, 10, 10)
---sButtonList = lwl.tableMerge(sButtonList, inventoryGrid)
 
---it's rendering regardless of visibility.  Fix this.
-
---uh a function that takes some saved states about a button and transfers it to the mouse kind of not really, just puts it in a semi-state where releasing on another iButton will put it in that one.
 
 
 --this makes the z-ordering of buttons based on the order of the sButtonList, Lower values on top.
@@ -725,4 +771,5 @@ end
 
 
 --uh, a function for selling these??  curently does not exist.  low priority but would be nice integration
+--not any time soon,
 
