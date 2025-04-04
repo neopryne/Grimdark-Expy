@@ -27,12 +27,15 @@ special
 scroll buttons must be square.  That's the law, it will throw you an error otherwise.
 --ScrollBarGraphicAssets(scrollUp, nubImage, renderScrollButton)
 --]]
+--lwUI
+
 local ENHANCEMENTS_TAB_NAME = "crew_enhancements"
 local EQUIPMENT_SUBTAB_INDEX = 1
 local TYPE_WEAPON = "type_weapon"
 local TYPE_ARMOR = "type_armor"
 local TYPE_TOOL = "type_tool"
 local function NOOP() end
+local MIN_FONT_SIZE = 5
 
 local function isWithinMask(mousePos, mask)
     return mousePos.x >= mask.getPos().x and mousePos.x <= mask.getPos().x + mask.width and
@@ -611,12 +614,12 @@ local function createTextBox(x, y, height, width, visibilityFunction, renderFunc
         Graphics.CSurface.GL_ClearAll()
         Graphics.CSurface.GL_SetStencilMode(1,1,1)
         Graphics.CSurface.GL_PushMatrix()
+        --Stencil of the size of the box
         Graphics.CSurface.GL_DrawRect(textBox.getPos().x, textBox.getPos().y, textBox.width, textBox.height, Graphics.GL_Color(1, 1, 1, 1))
         Graphics.CSurface.GL_PopMatrix()
         Graphics.CSurface.GL_SetStencilMode(2,1,1)
-        
-        local lowestY = Graphics.freetype.easy_printAutoNewlines(textBox.fontSize, textBox.getPos().x, textBox.getPos().y, textBox.width, textBox.text)
-        --textBox.height = lowestY - textBox.getPos().y --only if this is for in scroll bars.
+        --Actually print the text
+        Graphics.freetype.easy_printAutoNewlines(textBox.fontSize, textBox.getPos().x, textBox.getPos().y, textBox.width, textBox.text)
         Graphics.CSurface.GL_SetStencilMode(0,1,1)
         Graphics.CSurface.GL_PopStencilMode()
     end
@@ -627,25 +630,24 @@ local function createTextBox(x, y, height, width, visibilityFunction, renderFunc
     return textBox
 end
 
-
+--Minimum font size is five, choosing smaller will make it bigger than five.
 --You can put this one inside of a scroll window for good effect
-local function createExpandingTextBox(x, y, height, width, visibilityFunction, fontSize)
+local function createDynamicHeightTextBox(x, y, height, width, visibilityFunction, fontSize)
+    local textBox
+    local function expandingRenderFunction()
+        local lowestY = Graphics.freetype.easy_printAutoNewlines(textBox.fontSize, 5000, textBox.getPos().y, textBox.width, textBox.text).y
+        textBox.height = lowestY - textBox.getPos().y
+    end
     
-    
-    
+    textBox = createTextBox(x, y, height, width, visibilityFunction, expandingRenderFunction, fontSize)
+    return textBox
 end
-
-
-local MIN_FONT_SIZE = 5
-
---Just shortcuts the above strategy
---local function createScrollingTextBox(x, y, height, width, visibilityFunction, fontSize)
 
 --Font shrinks to accomidate text, I don't think this one looks as good generally, but I wanted to make it available.
 local function createFixedTextBox(x, y, height, width, visibilityFunction, maxFontSize)
     local textBox
     local function scalingFontRenderFunction()
-        textBox.text = textBox.text.."f"
+        --textBox.text = textBox.text.."f"
         if (#textBox.text > textBox.lastLength) then
             textBox.lastLength = #textBox.text
             --check if reduction needed
@@ -709,9 +711,10 @@ local ib1 = createInventoryButton(name, 300, 30, EQUIPMENT_ICON_SIZE + 2, EQUIPM
 local ib2 = createInventoryButton(name, 0, 0, EQUIPMENT_ICON_SIZE + 2, EQUIPMENT_ICON_SIZE + 2, tabOneStandardVisibility,
     solidRectRenderFunction(Graphics.GL_Color(1, .5, 0, 1)), inventoryStorageFunctionEquipment)
 ib1.addItem(seal_head)
-local t1 = createFixedTextBox(400, 40, 60, 90, tabOneStandardVisibility, 20)
+local t1 = createDynamicHeightTextBox(400, 40, 60, 90, tabOneStandardVisibility, 8)
 local longString = "Ok so this is a pretty long text box that's probably going to overflow the bounds of the text that created it lorum donor kit mama, consecutur rivus alterna nunc provinciamus."
---t1.text = longString
+t1.text = longString
+print(t1.height)
 
 local b1
 b1 = buildButton(0, 0, 50, 50, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(1, 0, 0, 1)),
