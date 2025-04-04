@@ -451,30 +451,6 @@ function solidRectRenderFunction(glColor)
 end
 
 
-local b1
-b1 = buildButton(0, 0, 50, 50, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(1, 0, 0, 1)),
-        function() print("thing dided") end, NOOP)
-local b2 = buildButton(0, 49, 50, 50, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(1, 0, 1, 1)), 
-        function() print("thing dided2") end, NOOP)
-
-local b4 = buildButton(400, 400, 50, 50, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(1, 1, 0, 1)),
-        function() print("thing dided") end, NOOP)
-
-local c1 = buildContainer(20, 0, 100, 200, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(0, 0, 1, .4)), {b1, b2}, false)
---c2 = buildContainer(50, 100, 200, 200, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(0, 0, 1, .4)), {c1})
-local b3 = buildButton(300, 400, 25, 10, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(1, 0, 0, 1)),
-        function() print("thing dided") end, NOOP)
-
-local s1 = createVerticalScrollContainer(300, 300, 200, 100, tabOneStandardVisibility, c1)
-
-table.insert(mTopLevelRenderList, s1)
-table.insert(mTopLevelRenderList, b3)
---local inventoryGrid = createButtonsInGrid(ENHANCEMENTS_TAB_NAME, EQUIPMENT_SUBTAB_INDEX, 50, 50, 200, 300, 40, 40, 10, 10)
---sButtonList = lwl.tableMerge(sButtonList, inventoryGrid)
-
---it's rendering regardless of visibility.  Fix this.
-
---uh a function that takes some saved states about a button and transfers it to the mouse kind of not really, just puts it in a semi-state where releasing on another iButton will put it in that one.
 
 
 local function inventoryStorageFunctionAny(item)
@@ -513,7 +489,8 @@ A mechanical item knows lots of things about itself, and maybe is important for 
 
 --visibility function inherited from the button they're attached to.
 --containingButton is the inventoryButton that holds this item.  render won't be called if this is nil as said button is the thing that calls it.
-local function createItem(name, itemType, width, height, visibilityFunction, renderFunction)
+--onTick takes no arguments, onCreate is passed the item being created so it can modify it.
+local function createItem(name, itemType, width, height, visibilityFunction, renderFunction, description, onCreate, onTick)
     local item
     local function itemRender()
         if (item.trackMouse) then
@@ -524,12 +501,17 @@ local function createItem(name, itemType, width, height, visibilityFunction, ren
             item.x = containingButton.getPos().x
             item.y = containingButton.getPos().y
         end
-        renderFunction()
+        renderFunction(item.maskFunction())
     end
     
     item = createObject(0, 0, width, height, visibilityFunction, itemRender)
     item.name = name
     item.itemType = itemType
+    item.description = description
+    item.onCreate = onCreate
+    item.onTick = onTick
+    
+    item.onCreate(item)
     return item
 end
 
@@ -567,8 +549,10 @@ local function createInventoryButton(name, x, y, height, width, visibilityFuncti
     end
     
     local function buttonRender()
-        button.renderFunction()
-        item.renderFunction()
+        renderFunction(button.maskFunction())
+        if (button.item) then
+            button.item.renderFunction(item.maskFunction())
+        end
     end
     
     button = buildButton(x, y, height, width, visibilityFunction, buttonRender, onClick, onRelease)
@@ -577,7 +561,6 @@ local function createInventoryButton(name, x, y, height, width, visibilityFuncti
     
     
     return button
-    --make the item render with the mouse when mouse down on it.
 end
 
 
@@ -591,8 +574,69 @@ local function buildCrewEquipmentScrollBar()
 end
 
 
---
-local three_way = createItem("Three-Way", TYPE_WEAPON, 30, 30, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(1, 1, .8, 1)))
+--In the crew loop, each crew will check the items assigned to them and call their onTick functions, (pass themselves in?)
+--It is the job of the items to do everything wrt their functionality.
+
+local EQUIPMENT_ICON_SIZE = 30
+
+--[[local three_way = createItem("Three-Way", TYPE_WEAPON, EQUIPMENT_ICON_SIZE, EQUIPMENT_ICON_SIZE, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(1, 1, .8, 1)),
+        "Hit two more people at the cost of decreased damage.", NOOP, NOOP)
+local seal_head = createItem("Seal Head", TYPE_ARMOR, EQUIPMENT_ICON_SIZE, EQUIPMENT_ICON_SIZE, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(1, .8, 1, 1)),
+        "The headbutts it enables are an effective counter to and ridicule you might come under from wearing such odd headgear.", NOOP, NOOP)
+local netgear = createItem("Three-Way", TYPE_TOOL, EQUIPMENT_ICON_SIZE, EQUIPMENT_ICON_SIZE, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(.8, 1, 1, 1)),
+        "It's gear made of nets.  Also serves as a wireless access point. Cooldown: two minutes.  Deploy nets in a room to slow all movement through it for twenty five seconds by 60%.  Single use for some reason.", NOOP, NOOP)
+        --]]
+--[[
+    Description: "It's gear made of nets.  Also serves as a wireless access point.
+    Cooldown: two minutes.  Deploy nets in a room to slow all movement through it for twenty five seconds by 60%.  Single use for some reason."
+    onCreate()
+        --set up variables specific to this object's implementation.  Check that this is actually a good way of doing this, vs decoupling the object instance from the logic it uses
+        --That version would involve each crewmem looking up their equipped items in the persisted values, and is probably better as a first guess at what a good model looks like.
+        If it isn't, we can just combine the objects.
+    end
+    
+    onTick()
+        if (item.crewmem) then
+            --do item stuff
+        end
+    end
+    
+    
+--]]
+
+
+local ib1 = createInventoryButton(name, 300, 30, EQUIPMENT_ICON_SIZE + 2, EQUIPMENT_ICON_SIZE + 2, tabOneStandardVisibility,
+    solidRectRenderFunction(Graphics.GL_Color(1, .5, 0, 1)), inventoryStorageFunctionEquipment)
+local ib2 = createInventoryButton(name, 0, 0, EQUIPMENT_ICON_SIZE + 2, EQUIPMENT_ICON_SIZE + 2, tabOneStandardVisibility,
+    solidRectRenderFunction(Graphics.GL_Color(1, .5, 0, 1)), inventoryStorageFunctionEquipment)
+--ib1.addItem(seal_head)
+
+
+local b1
+b1 = buildButton(0, 0, 50, 50, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(1, 0, 0, 1)),
+        function() print("thing dided") end, NOOP)
+local b2 = buildButton(0, 49, 50, 50, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(1, 0, 1, 1)), 
+        function() print("thing dided2") end, NOOP)
+
+local b4 = buildButton(400, 400, 50, 50, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(1, 1, 0, 1)),
+        function() print("thing dided") end, NOOP)
+
+local c1 = buildContainer(20, 0, 100, 200, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(0, 0, 1, .4)), {b1, b2}, false)
+--c2 = buildContainer(50, 100, 200, 200, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(0, 0, 1, .4)), {c1})
+local b3 = buildButton(300, 400, 25, 10, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(1, 0, 0, 1)),
+        function() print("thing dided") end, NOOP)
+
+local s1 = createVerticalScrollContainer(300, 300, 200, 100, tabOneStandardVisibility, c1)
+
+table.insert(mTopLevelRenderList, s1)
+table.insert(mTopLevelRenderList, b3)
+table.insert(mTopLevelRenderList, ib1)
+--local inventoryGrid = createButtonsInGrid(ENHANCEMENTS_TAB_NAME, EQUIPMENT_SUBTAB_INDEX, 50, 50, 200, 300, 40, 40, 10, 10)
+--sButtonList = lwl.tableMerge(sButtonList, inventoryGrid)
+
+--it's rendering regardless of visibility.  Fix this.
+
+--uh a function that takes some saved states about a button and transfers it to the mouse kind of not really, just puts it in a semi-state where releasing on another iButton will put it in that one.
 
 
 --this makes the z-ordering of buttons based on the order of the sButtonList, Lower values on top.
