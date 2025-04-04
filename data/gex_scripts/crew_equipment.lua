@@ -1,34 +1,86 @@
 if (not mods) then mods = {} end
 local lwl = mods.lightweight_lua
 --local userdata_table = mods.multiverse.userdata_table
+--TODO fullscreen position math needs fixing.
 
 --any object capable of holding another object must have a function that passes down renderWrapping, and one for any other such operators.
+--todo I broke everything somehow
 
 --[[
 
 Functions are built to deal with objects (renderable).
+Objects are tables, so you can add fields to them as you see fit.
 
-Object {x,y,getPos,height,width,visibilityFunction,renderFunction} --position is absolute on the global UI
+Internal fields:
+getPos() --Call to get an table {x=x, y=y}.  This is the absolute position of the object on screen.
+
+Object {x,y,getPos,height,width,visibilityFunction,renderFunction} --x and y are relative to the containing object, or the global UI if top level.
 --Button {onClick, enabledFunction} --enabled tells the button if it should work or not, some buttons have different render states based on this as well.
 --Container {Objects} (Abstract, if that makes any sense.)
-----Scroll Bar {internals={scrollUpButton, scrollDown, scrollBar, scrollCursor}}
+----Scroll Bar {internals={scrollUpButton, scrollDown, scrollBar, scrollCursor}} (barWidth?  maybe I'll make a scroll bar graphics template, and include the base package with this.)
 ----Button Group {padding?}
+
+special
+(means I have to stretch the nub for these, it will include renderFunctions for the buttons that get image assets)
+scroll buttons must be square.  That's the law, it will throw you an error otherwise.
+--ScrollBarGraphicAssets(scrollUp, nubImage, renderScrollButton)
 --]]
 local ENHANCEMENTS_TAB_NAME = "crew_enhancements"
 local EQUIPMENT_SUBTAB_INDEX = 1
 local function NOOP() end
 
+local function isWithinMask(mousePos, mask)
+    return mousePos.x >= mask.getPos().x and mousePos.x <= mask.getPos().x + mask.width and
+           mousePos.y >= mask.getPos().y and mousePos.y <= mask.getPos().y + mask.height
+end
+
 local mTabbedWindow = ""
 local mTab = 1
-local mPage = 1--used to calculate which crew are displayed in the equipment loadout slots.  basically mPage % slots per page. Or do the scrolly thing, it's easier than I thought.
+--local mPage = 1--used to calculate which crew are displayed in the equipment loadout slots.  basically mPage % slots per page. Or do the scrolly thing, it's easier than I thought.
 --Objects to be rendered go here.  Visible buttons are clickable.
 local mTopLevelRenderList = {}
 local mHoveredButton = nil
+local mHoveredScrollContainer = nil
 local mClickedButton = nil --mouseUp will be called on this.
 
-local function isWithinMask(x, y, mask)
-    return mask and x >= mask.x and y >= mask.y and x <= mask.x + mask.w and y <= mask.y + mask.h
+local function generateStandardVisibilityFunction(tabName, subtabIndex)
+    return function()
+        --print(tabName, mTab, subtabIndex, mTabbedWindow)
+        --return true
+        return mTab == subtabIndex and mTabbedWindow == tabName
+    end
 end
+local tabOneStandardVisibility = generateStandardVisibilityFunction(ENHANCEMENTS_TAB_NAME, EQUIPMENT_SUBTAB_INDEX)
+
+
+--[[
+
+For the things I need for the UI to actually work, upon your crew list changing, (#crew changes, I think this works with people getting kicked off),
+the crew scrollbar is regenerated.  Or at least the content is wiped and replaced with a new button list.
+--Uh.  Maybe not, we do need to keep track of who has which equipment, and this is something we need to put in metatables as well.
+The metavars should probably be the source of truth for who has what, and I rebuild the tables to reflect that.
+Otherwise I could see messing up to easily.
+--Probably a list of items and who owns them (-1 for inventory)
+--No, that doesn't allow for duplicates.
+Each crew will have three slots, which will be used for tracking what equipment they have in those slots.
+Inventory will be INVENTORY_TYPE_N and hold the same.
+Inventory is a lot easier to keep track of, as I know when that value changes.
+    Once a crew is no longer on the ship, delete their inventory.
+    Upon starting a new run, delete all inventory.
+
+Here's how I build my memory:
+NumCrew = n
+GEX_CREW_[1-N]: IDs of those crewmembers
+GEX_CREW_[ID]_[TYPE]: ID of equipment of that type equipped to crewmember.
+Actually besides the type line, this is strong enough to put in LWL and consume it in MSCP, SICC, and GEX (this).
+
+only need to build this list when opening this menu for the first time.  
+
+--]]
+
+
+
+
 
 --todo the base renderFunction needs to take a mask, but I don't think any of the object versions need to, they all pass themselves as the argument to it.
 --
@@ -95,8 +147,7 @@ local function buildButton(x, y, width, height, visibilityFunction, renderFuncti
         local hovering = false
         local mousePos = Hyperspace.Mouse.position
         local buttonMask = button.maskFunction()
-        if mousePos.x >= buttonMask.getPos().x and mousePos.x <= buttonMask.getPos().x + buttonMask.width and
-               mousePos.y >= buttonMask.getPos().y and mousePos.y <= buttonMask.getPos().y + buttonMask.height then
+        if isWithinMask(mousePos, buttonMask) then
             hovering = true
             if not (mHoveredButton == button) then
                 print("button_hovered ", button)
@@ -138,8 +189,11 @@ local function combineMasks(object1, object2)
     return combinedMaskFunction
 end
 
-
-local function buildContainer(x, y, width, height, visibilityFunction, renderFunction, objects)
+--Once a scroll bar is created, adding things to it means adding things to the content container.
+--This requires a dynamic container update method.  Probably worth having.
+--.addObject(object)
+--no way to remove objects currently.  Do it with your visFunc, I guess.
+local function buildContainer(x, y, width, height, visibilityFunction, renderFunction, objects, renderOutsideBounds)
     local container
     --Append container rendering behavior to whatever function the user wants (if any) to show up as the container's background.
     local function renderContainer(mask)
@@ -161,6 +215,7 @@ local function buildContainer(x, y, width, height, visibilityFunction, renderFun
     
     --This should be called once the thing is created with the default maskFunction
     local function setMaskFunction(maskFunc)
+        --TODO uncomment if container.renderOutsideBounds then return end
         container.maskFunction = maskFunc
         for _, object in ipairs(objects) do
             object.setMaskFunction(combineMasks(container, object))
@@ -169,7 +224,7 @@ local function buildContainer(x, y, width, height, visibilityFunction, renderFun
         end
     end
     
-    for _, object in ipairs(objects) do
+    local function containObject(object)
         --adjust getPos
         local oldGetPos = object.getPos
         function containedGetPos()
@@ -184,6 +239,7 @@ local function buildContainer(x, y, width, height, visibilityFunction, renderFun
         local oldVisibilityFunction = object.visibilityFunction
         function containedVisibilityFunction()
             local retVal = false
+            --TODO uncomment if container.renderOutsideBounds then return true end
             if ((object.getPos().x > container.getPos().x + container.width) or (object.getPos().x + object.width < container.getPos().x) or
                 (object.getPos().y > container.getPos().y + container.height) or (object.getPos().y + object.height < container.getPos().y)) then
                 retVal = false
@@ -200,17 +256,35 @@ local function buildContainer(x, y, width, height, visibilityFunction, renderFun
         object.visibilityFunction = containedVisibilityFunction
     end
     
+    local function addObject(object, resizeToFit) --adds the given object to the container, expanding container to accomodate it if resizeToFit.
+        if (resizeToFit) then
+            container.height = math.max(container.height, object.y + object.height)
+            container.width = math.max(container.width, object.x + object.width)
+        end
+        containObject(object)
+        table.insert(container.objects, object)
+    end
+    --TODO test this works.
+    
+    --Finish the constructor
+    for _, object in ipairs(objects) do
+        containObject(object)
+    end
     container = createObject(x, y, width, height, visibilityFunction, renderContainer)
     container[objects] = objects
+    container.addObject = addObject 
     --pass the mask to contained objects
     container.setMaskFunction = setMaskFunction
     container.setMaskFunction(container.maskFunction)
+    container.renderOutsideBounds = renderOutsideBounds
     return container
 end
 
 
 local SCROLL_NUB_BIGNUM = 500--todo change
 --TODO do I need to invert the render order for containers?
+
+--TODO fullscreen causes button hold issues, fix this.
 
 --scroll bars are a two-leveled container.  This one goes up and down.
 --container
@@ -219,6 +293,9 @@ local SCROLL_NUB_BIGNUM = 500--todo change
 ----scroll nub
 ----content (This is an object you pass in to the scroll bar, it will be cut off horiz if it's too large.)
 --Content is a single item with a y coordinate of 0. It can have variable size, and can be longer than the scroll container, but not wider.
+
+--TODO adding objects doesn't work yet because it doesn't resize the contentContainer to fit them.  Fix this.
+--actually add a resizeToFit argument to 
 local function createVerticalScrollContainer(x, y, width, height, visibilityFunction, content)
     local barWidth = 12
     local scrollIncrement = 30
@@ -236,9 +313,11 @@ local function createVerticalScrollContainer(x, y, width, height, visibilityFunc
         scrollContainer.scrollValue = scrollContainer.scrollValue - scrollIncrement
     end
     
-    local function nubClicked(x, y)
+    local function nubClicked() --Don't use the values passed here, they break when resizing the window.  Use the one Hyperspace gives you.
+        local mousePos = Hyperspace.Mouse.position
         scrollNub.mouseTracking = true
-        scrollNub.mouseOffset = y - scrollNub.getPos().y
+        scrollNub.mouseOffset = mousePos.y - scrollNub.getPos().y
+        print("mouse offset: ", mousePos.y - scrollNub.getPos().y, " mousePos ", mousePos.y, " scrollNub ", scrollNub.getPos().y)
     end
     local function nubReleased()
         scrollNub.mouseTracking = false
@@ -283,6 +362,11 @@ local function createVerticalScrollContainer(x, y, width, height, visibilityFunc
     
     --todo nub should change size based on scrollDelta, clamped to barWidth and  contentContainer.height - (barWidth * 2)
     local function renderContent()
+        local mousePos = Hyperspace.Mouse.position
+        if isWithinMask(mousePos, scrollContainer.maskFunction()) then
+            mHoveredScrollContainer = scrollContainer
+        end
+        
         --need to fix my scrollbar math.
         local scrollWindowRange = maxWindowScroll() - minWindowScroll()
         --scrollbar slider size TODO fix this math too.
@@ -290,58 +374,42 @@ local function createVerticalScrollContainer(x, y, width, height, visibilityFunc
         scrollNub.height = math.max(barWidth, math.min(contentContainer.height - (barWidth * 2), scrollNub.height))
         
         if (scrollNub.mouseTracking) then
-            local mousePos = Hyperspace.Mouse.position
             scrollNub.y = mousePos.y - scrollContainer.y - scrollNub.mouseOffset
              --clamp to bar length TODO nub centering
             --math out
             scrollContainer.scrollValue = nubToScroll(scrollNub.y)
         end
         
-        print("scrollValue: ", scrollContainer.scrollValue, " maxValue ", maxWindowScroll()) --todo one of these shouldn't be needed if I'm converting right.  the other one I think.
+        --print("scrollValue: ", scrollContainer.scrollValue, " maxValue ", maxWindowScroll()) --todo one of these shouldn't be needed if I'm converting right.  the other one I think.
         scrollContainer.scrollValue = math.max(minWindowScroll(), math.min(maxWindowScroll(), scrollContainer.scrollValue))
         --TODO convert scrollValue to nubPos and apply to
         scrollNub.y = scrollToNub(scrollContainer.scrollValue)
         --scrollNub.y = math.max(nubMinPos(), math.min(nubMaxPos(), scrollNub.y))
-        print("scrollValue: ", scrollContainer.scrollValue, " nubPos ", scrollNub.y, "nubMaxPos ", nubMaxPos())
+        --print("scrollValue: ", scrollContainer.scrollValue, " nubPos ", scrollNub.y, "nubMaxPos ", nubMaxPos())
         
         content.y = -scrollContainer.scrollValue
         --print("Rendering content level")
     end
     
     
-    contentContainer = buildContainer(0, 0, width - barWidth, height, visibilityFunction, renderContent, {content})
+    contentContainer = buildContainer(0, 0, width - barWidth, height, visibilityFunction, renderContent, {content}, true)
     scrollContainer = buildContainer(x, y, width, height, visibilityFunction, solidRectRenderFunction(Graphics.GL_Color(.2, .8, .8, .3)),
-        {contentContainer, scrollBar, scrollUpButton, scrollDownButton, scrollNub})
+        {contentContainer, scrollBar, scrollUpButton, scrollDownButton, scrollNub}, true)
     scrollContainer.scrollValue = barWidth
+    scrollContainer.scrollUp = scrollUp
+    scrollContainer.scrollDown = scrollDown
     
     return scrollContainer
 end
 
---Inside this scroll bar is a vertical list of buttons, seperate from the scroll bar.
---local crewScrollBar = createVerticalScrollBar()
-
-local function scrollBarRegister(scrollBar, button)
-    
-end
-
-local function generateStandardVisibilityFunction(tabName, subtabIndex)
-    return function()
-        return mTab == subtabIndex and mTabbedWindow == tabName
-    end
-end
-
-local tabOneStandardVisibility = generateStandardVisibilityFunction(ENHANCEMENTS_TAB_NAME, EQUIPMENT_SUBTAB_INDEX)
-
---render tabs
 
 
 
-
---should have a function to render itself?
+--
 
 
 --array of buttons for inventory slots.  If they are full, they render the item they hold on top of them. (ill define items later)  Their onClick returns the item they hold, if any, and makes it render on the cursor until the cursor is released, at which point it tries to move to the highlighted button if it can hold it, and otherwise snaps back to the one it came from.
-function createButtonGridFromSize(visibilityFunction, x, y, width, height, button_width, button_height, padding, total_buttons)
+function createButtonGridFromSize(visibilityFunction, x, y, width, height, button_width, button_height, padding, total_buttons, onClick)
     local buttons = {}
     local cols = math.floor((width + padding) / (button_width + padding))  -- Number of columns that fit
     local rows = math.ceil(total_buttons / cols)  -- Total rows needed
@@ -353,13 +421,8 @@ function createButtonGridFromSize(visibilityFunction, x, y, width, height, butto
         local button_x = x + col * (button_width + padding)
         local button_y = y + row * (button_height + padding)
 
-        table.insert(buttons, buildButton(button_x, button_y, button_width, button_height,
+        table.insert(buttons, buildButton(button_x, button_y, button_width, button_height, visibilityFunction, onClick, 
             function()
-                return true --todo fix
-            end,
-            function()
-                print("Button clicked at (" .. button_x .. ", " .. button_y .. ")")
-            end, function()
                 Graphics.CSurface.GL_DrawRect(button_x, button_y, button_width, button_height, Graphics.GL_Color(0, 1, 1, 1))
             end
         ))
@@ -369,6 +432,7 @@ end
 
 --Define either rows or columns, not both.  Set the other negative.
 --todo rows, columns.  Currently assumes 1 column vertical downwards.
+--Returns a container that is large enough to hold the given buttons.
 function createButtonGridFromButtons(visibilityFunction, x, y, padding, buttons)
     
 end
@@ -391,7 +455,7 @@ local b2 = buildButton(0, 49, 50, 50, tabOneStandardVisibility, solidRectRenderF
 local b4 = buildButton(400, 400, 50, 50, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(1, 1, 0, 1)),
         function() print("thing dided") end, NOOP)
 
-local c1 = buildContainer(20, 0, 100, 200, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(0, 0, 1, .4)), {b1, b2})
+local c1 = buildContainer(20, 0, 100, 200, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(0, 0, 1, .4)), {b1, b2}, false)
 --c2 = buildContainer(50, 100, 200, 200, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(0, 0, 1, .4)), {c1})
 local b3 = buildButton(300, 400, 25, 10, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(1, 0, 0, 1)),
         function() print("thing dided") end, NOOP)
@@ -405,6 +469,91 @@ table.insert(mTopLevelRenderList, b3)
 
 --it's rendering regardless of visibility.  Fix this.
 
+--uh a function that takes some saved states about a button and transfers it to the mouse kind of not really, just puts it in a semi-state where releasing on another iButton will put it in that one.
+
+local function inventoryStorageFunctionGeneric(item)
+    return true
+end
+
+local function inventoryStorageFunctionEqipment(item)
+    return (item.type == TYPE_EQUIPMENT)
+end
+
+local function inventoryStorageFunctionArmor(item)
+    return (item.type == TYPE_ARMOR)
+end
+
+local function inventoryStorageFunctionTool(item)
+    return (item.type == TYPE_TOOL)
+end
+
+--[[
+Items are tables with the following properties
+
+type: describes what kind of thing the item is, used for determing which inventory buttons can hold which kinds of items.
+name: what exactly you have stored in that slot.
+renderFunction: hopefully a png that's the same size as their button.
+
+
+--]]
+
+--visibility function inherited from the button they're attached to.
+local function createItem(name, itemType, renderFunction)
+    
+    return {name=name, itemType=itemType, renderFunction=renderFunction}
+end
+
+
+--I might actually put this in the UI library, it's pretty useful.
+local function createInventoryButton(name, x, y, height, width, visibilityFunction, renderFunction, allowedItemsFunction)
+    --todo custom logic has to go somewhere else, as these need to work even when the button isn't rendered.
+    local button =
+    
+    local function onClick()
+        button.item.trackMouse = true
+    end
+    
+    local function onRelease()
+        local mousePos = Hyperspace.Mouse.position
+        button.item.trackMouse = false
+        if (mHoveredButton and mHoveredButton.addItem) then
+            if (mHoveredButton.addItem(button.item)) then
+                button.item = nil
+            end
+        end
+    end
+    
+    local function addItem(item)
+        if button.item then
+            return false
+        end
+        if allowedItemsFunction(item) then
+            button.item = item
+            return true
+        end
+        return false
+    end
+    
+    button = buildButton(x, y, height, width, visibilityFunction, renderFunction, onClick, onRelease)
+    button.addItem = addItem
+    button.allowedItemsFunction = allowedItemsFunction
+    
+    
+    return button
+    --make the item render with the mouse when mouse down on it.
+end
+
+
+local function buildCrewEquipmentScrollBar()
+    local crewScrollBar
+    
+    --create a linear array of things.  This means containers need a render outside boundaries argument.
+    --renderContentOutsideBounds
+    
+    return crewScrollBar
+end
+
+
 
 --this makes the z-ordering of buttons based on the order of the sButtonList, Lower values on top.
 function renderObjects()
@@ -417,8 +566,7 @@ function renderObjects()
     if (b1.y > 202) then
         b1.y = 0
     end
-    --print("b1x: ", b1.x, " b1posx ", b1.getPos().x, "b1vis: ", b1.visibilityFunction())
-    --print("render objects")
+    
     local hovering = false
     
     Graphics.CSurface.GL_PushMatrix()
@@ -444,6 +592,7 @@ if (script) then
         if tabName == ENHANCEMENTS_TAB_NAME then
             if not (mTabbedWindow == ENHANCEMENTS_TAB_NAME) then
                 --do reset stuff
+                --TODO create the crew scroll bar from persisted values
             end
         end
         mTabbedWindow = tabName
@@ -470,7 +619,16 @@ if (script) then
         return Defines.Chain.CONTINUE
     end)
 
+--[[
+TODO add this when hyperspace adds the event for scrolling
+    script.on_internal_event(Defines.InternalEvents.ON_MOUSE_L_BUTTON_UP, function(x,y)
+        if (mHoveredScrollContainer) then
+            mHoveredScrollContainer.scrollDown()
+        end
+        return Defines.Chain.CONTINUE
+    end)
 --todo add scroll wheel scrolling to scroll bars, prioritizing the lowest level one.
+--]]
 end
 
 
