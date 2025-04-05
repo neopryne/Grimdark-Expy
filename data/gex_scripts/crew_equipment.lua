@@ -172,7 +172,7 @@ local function buildButton(x, y, width, height, visibilityFunction, renderFuncti
     return button
 end
 
---todo move
+--todo this can't dyanmically update based on the values of object1 and object2?  I mean it should, that's what the mask function does.
 --a mask is an object, so this also returns an function that returns an object.
 local function combineMasks(object1, object2)
     local maskFunction1 = object1.maskFunction --in the base case, these masks are the objects themselves, and will have all properties of an object.
@@ -199,9 +199,13 @@ end
 
 --Once a scroll bar is created, adding things to it means adding things to the content container.
 --This requires a dynamic container update method.  Probably worth having.
---.addObject(object)
---no way to remove objects currently.  Do it with your visFunc, I guess.
-local function buildContainer(x, y, width, height, visibilityFunction, renderFunction, objects, renderOutsideBounds)
+--.
+--[[
+addObject(object): call this if you need to add something to the container after creation.
+renderOutsideBounds: if true, objects will render even if out of bounds of the container.
+sizeToContent: if true, the container will dynamically adjust itself to the smallest sizes that hold all of its contents.
+--]]
+local function buildContainer(x, y, width, height, visibilityFunction, renderFunction, objects, renderOutsideBounds, sizeToContent)
     local container
     --Append container rendering behavior to whatever function the user wants (if any) to show up as the container's background.
     local function renderContainer(mask)
@@ -212,6 +216,10 @@ local function buildContainer(x, y, width, height, visibilityFunction, renderFun
         
         local i = 1
         for _, object in ipairs(objects) do
+            if (container.sizeToContent) then
+                container.height = math.max(container.height, object.y + object.height)
+                container.width = math.max(container.width, object.x + object.width)
+            end
             --print("render object at ", object.getPos().x, ", ", object.getPos().y)
             if object.renderFunction(object.maskFunction()) then
                 hovering = true
@@ -227,12 +235,12 @@ local function buildContainer(x, y, width, height, visibilityFunction, renderFun
         container.maskFunction = maskFunc
         for _, object in ipairs(objects) do
             object.setMaskFunction(combineMasks(container, object))
-            object.setMaskFunction(combineMasks(container, object))
+            --object.setMaskFunction(combineMasks(container, object))
             --object.setMaskFunction(combineMasks(container, object))
         end
     end
     
-    local function containObject(object)
+    local function addObject(object)
         --adjust getPos
         local oldGetPos = object.getPos
         function containedGetPos()
@@ -262,27 +270,18 @@ local function buildContainer(x, y, width, height, visibilityFunction, renderFun
             return retVal
         end
         object.visibilityFunction = containedVisibilityFunction
-    end
-    
-    local function addObject(object, resizeToFit) --adds the given object to the container, expanding container to accomodate it if resizeToFit.
-        if (resizeToFit) then
-            container.height = math.max(container.height, object.y + object.height)
-            container.width = math.max(container.width, object.x + object.width)
-        end
-        containObject(object)
         table.insert(container.objects, object)
     end
-    --TODO test this works.
-    
-    --Finish the constructor
-    for _, object in ipairs(objects) do
-        containObject(object)
-    end
+
     container = createObject(x, y, width, height, visibilityFunction, renderContainer)
-    container[objects] = objects
-    container.addObject = addObject 
+    container.objects = {}
+    for _, object in ipairs(objects) do
+        addObject(object)
+    end
+    container.addObject = addObject
     --pass the mask to contained objects
     container.renderOutsideBounds = renderOutsideBounds
+    container.sizeToContent = sizeToContent
     container.setMaskFunction = setMaskFunction
     container.setMaskFunction(container.maskFunction)
     return container
@@ -301,9 +300,10 @@ local SCROLL_NUB_BIGNUM = 500--todo change
 ----scroll nub
 ----content (This is an object you pass in to the scroll bar, it will be cut off horiz if it's too large.)
 --Content is a single item with a y coordinate of 0. It can have variable size, and can be longer than the scroll container, but not wider.
+--Don't make me tap the sign, though this setup means containers have to be willing to be dynamically sized as well if you want more than one item here.
 
 --TODO adding objects doesn't work yet because it doesn't resize the contentContainer to fit them.  Fix this.
---actually add a resizeToFit argument to 
+--scroll bars always grow to fit their content, if you want one that doesn't, ping me.
 local function createVerticalScrollContainer(x, y, width, height, visibilityFunction, content)
     local barWidth = 12
     local scrollIncrement = 30
@@ -406,6 +406,7 @@ local function createVerticalScrollContainer(x, y, width, height, visibilityFunc
     scrollContainer.scrollValue = barWidth
     scrollContainer.scrollUp = scrollUp
     scrollContainer.scrollDown = scrollDown
+    scrollContainer.contentContainer = contentContainer
     
     return scrollContainer
 end
@@ -603,6 +604,7 @@ end
 --Internal fields:  text, what this will display.  I could do something clever where it tries to shrink the font size if it's too big, or another thing where I only put these inside scroll windows which would be pretty clever.
 --This needs to set its height dynamically and be used inside a scroll bar, or change font size dynamically.
 --This one actually is local, the other ones are what I'll expose for use.
+--textColor (GL_Color) controls the color of the text.
 local function createTextBox(x, y, height, width, visibilityFunction, renderFunction, fontSize)
     local textBox
     
@@ -615,7 +617,7 @@ local function createTextBox(x, y, height, width, visibilityFunction, renderFunc
         Graphics.CSurface.GL_SetStencilMode(1,1,1)
         Graphics.CSurface.GL_PushMatrix()
         --Stencil of the size of the box
-        Graphics.CSurface.GL_DrawRect(textBox.getPos().x, textBox.getPos().y, textBox.width, textBox.height, Graphics.GL_Color(1, 1, 1, 1))
+        Graphics.CSurface.GL_DrawRect(mask.getPos().x, mask.getPos().y, mask.width, mask.height, textBox.textColor)
         Graphics.CSurface.GL_PopMatrix()
         Graphics.CSurface.GL_SetStencilMode(2,1,1)
         --Actually print the text
@@ -627,6 +629,7 @@ local function createTextBox(x, y, height, width, visibilityFunction, renderFunc
     textBox = createObject(x, y, height, width, visibilityFunction, renderText)
     textBox.text = ""
     textBox.fontSize = fontSize
+    textBox.textColor = Graphics.GL_Color(1, 1, 1, 1)
     return textBox
 end
 
@@ -702,7 +705,7 @@ local netgear = createItem("Three-Way", TYPE_TOOL, EQUIPMENT_ICON_SIZE, EQUIPMEN
 --]]
 
 
-
+--TODO update scroll bar sizes dynamically to accomidate text boxes (and other things)
 
 
 
@@ -711,10 +714,11 @@ local ib1 = createInventoryButton(name, 300, 30, EQUIPMENT_ICON_SIZE + 2, EQUIPM
 local ib2 = createInventoryButton(name, 0, 0, EQUIPMENT_ICON_SIZE + 2, EQUIPMENT_ICON_SIZE + 2, tabOneStandardVisibility,
     solidRectRenderFunction(Graphics.GL_Color(1, .5, 0, 1)), inventoryStorageFunctionEquipment)
 ib1.addItem(seal_head)
-local t1 = createDynamicHeightTextBox(400, 40, 60, 90, tabOneStandardVisibility, 8)
+local t1 = createDynamicHeightTextBox(0, 40, 60, 90, tabOneStandardVisibility, 8)
 local longString = "Ok so this is a pretty long text box that's probably going to overflow the bounds of the text that created it lorum donor kit mama, consecutur rivus alterna nunc provinciamus."
 t1.text = longString
 print(t1.height)
+
 
 local b1
 b1 = buildButton(0, 0, 50, 50, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(1, 0, 0, 1)),
@@ -725,17 +729,19 @@ local b2 = buildButton(0, 49, 50, 50, tabOneStandardVisibility, solidRectRenderF
 local b4 = buildButton(400, 400, 50, 50, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(1, 1, 0, 1)),
         function() print("thing dided") end, NOOP)
 
-local c1 = buildContainer(20, 0, 100, 200, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(0, 0, 1, .4)), {ib2}, false)
+local c1 = buildContainer(20, 0, 10, 10, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(0, 0, 1, .4)), {ib2, t1}, false, true)
 --c2 = buildContainer(50, 100, 200, 200, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(0, 0, 1, .4)), {c1})
 local b3 = buildButton(300, 400, 25, 10, tabOneStandardVisibility, solidRectRenderFunction(Graphics.GL_Color(1, 0, 0, 1)),
         function() print("thing dided") end, NOOP)
 
 local s1 = createVerticalScrollContainer(300, 300, 200, 100, tabOneStandardVisibility, c1)
+print("c1: ", c1.height)
+print("some other values: ", s1.contentContainer.height) --content height should never change, it's the virtual size of the thing inside, which I'm supposed to be updating on but also clearly isn't updating itself.  So.
 
 table.insert(mTopLevelRenderList, s1)
 table.insert(mTopLevelRenderList, b3)
 table.insert(mTopLevelRenderList, ib1)
-table.insert(mTopLevelRenderList, t1)
+--table.insert(mTopLevelRenderList, t1)
 --local inventoryGrid = createButtonsInGrid(ENHANCEMENTS_TAB_NAME, EQUIPMENT_SUBTAB_INDEX, 50, 50, 200, 300, 40, 40, 10, 10)
 
 
