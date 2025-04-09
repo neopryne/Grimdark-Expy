@@ -45,6 +45,56 @@ However, there's no getting around needing to reconstruct the UI upon loading.
 --Also note that due to how I've constructed this, items may stick around after the crew using them has died, so I need to make sure the calls don't error.
 --]]
 
+--class needed for item storage, move this to lwl once things work.
+local SelfIndexingList = {}
+SelfIndexingList.__index = SelfIndexingList
+
+function SelfIndexingList:new()
+	local list = {
+		items = {},
+		length = 0
+	}
+	setmetatable(list, self)
+	return list
+end
+
+-- Append a new item
+function SelfIndexingList:append(item)
+	self.length = self.length + 1
+	item._index = self.length
+	self.items[self.length] = item
+end
+
+-- Remove an item by index
+function SelfIndexingList:remove(index)
+	if index < 1 or index > self.length then return end
+
+	table.remove(self.items, index)
+	self.length = self.length - 1
+
+	-- Reassign indices
+	for i = index, self.length do
+		self.items[i]._index = i
+	end
+end
+
+-- Get item by index
+function SelfIndexingList:get(index)
+	return self.items[index]
+end
+
+-- Get item by index
+function SelfIndexingList:size()
+	return self.length
+end
+
+-- Print all items' indices
+function SelfIndexingList:print()
+	for i, item in ipairs(self.items) do
+		print(i, "=>", item._index)
+	end
+end
+
 
 local function getNewElements(newSet, initialSet)
     elements = {}
@@ -76,31 +126,32 @@ if (script) then
             --update mCrewIds
             local playerCrew = lwl.getAllMemberCrew(ownshipManager)
             for _, crewChangeObserver in ipairs(mCrewChangeObservers) do
-                crewChangeObserver.crewIds = {}
+                crewChangeObserver.crew = {}
                 for i=1,#playerCrew do
-                    table.insert(crewChangeObserver.crewIds, playerCrew[i].extend.selfId)
+                    table.insert(crewChangeObserver.crew, playerCrew[i])--todo check if this compares correctly.
                 end
             end
         end
     end)
 end
---move this to a library
+
+--move this to a library.  Making this track crew for better utility
 function createCrewChangeObserver()
     local crewChangeObserver = {}
-    crewChangeObserver.crewIds = {}
-    crewChangeObserver.lastSeenIds = {}
+    crewChangeObserver.crew = {}
+    crewChangeObserver.lastSeenCrew = {}
 
     --actually no, just return a new object to all consumers so they don't conflict.
     local function saveLastSeenState()
-        crewChangeObserver.lastSeenIds = lwl.deepCopyTable(crewChangeObserver.crewIds)
+        crewChangeObserver.lastSeenCrew = lwl.deepCopyTable(crewChangeObserver.crew)
     end
     --local function hasStateChanged()
     --Return arrays of the crew diff from last save.
     local function getAddedCrew()
-        return getNewElements(crewChangeObserver.crewIds, crewChangeObserver.lastSeenIds)
+        return getNewElements(crewChangeObserver.crew, crewChangeObserver.lastSeenCrew)
     end
     local function getRemovedCrew()
-        return getNewElements(crewChangeObserver.lastSeenIds, crewChangeObserver.crewIds)
+        return getNewElements(crewChangeObserver.lastSeenCrew, crewChangeObserver.crew)
     end
     
     crewChangeObserver.saveLastSeenState = saveLastSeenState
@@ -123,10 +174,13 @@ local TYPE_TOOL = "type_tool"
 local EQUIPMENT_ICON_SIZE = 30 --todo adjust as is good
 
 local mCrewChangeObserver = createCrewChangeObserver()
+local mCrewListContainer
 
 local mTabbedWindow = ""
 local mTab = 1
 local mGlobal = Hyperspace.Global.GetInstance()
+--Items must be added to this list when they are created or loaded
+local mItemList = SelfIndexingList:new()
 
 --local mPage = 1--used to calculate which crew are displayed in the equipment loadout slots.  basically mPage % slots per page. Or do the scrolly thing, it's easier than I thought.
 local function generateStandardVisibilityFunction(tabName, subtabIndex)
@@ -150,28 +204,35 @@ print("seal head is: ", seal_head.itemType)
 
 ------------------------------------INVENTORY FILTER FUNCTIONS----------------------------------------------------------
 
-local function inventoryStorageFunctionAny(item)
+local function inventoryFilterFunctionAny(item)
     return true
 end
 
-local function inventoryStorageFunctionWeapon(item)
+local function inventoryFilterFunctionWeapon(item)
     return (item ~= nil and item.itemType == TYPE_WEAPON)
 end
 
-local function inventoryStorageFunctionArmor(item)
+local function inventoryFilterFunctionArmor(item)
     return (item ~= nil and item.itemType == TYPE_ARMOR)
 end
 
-local function inventoryStorageFunctionTool(item)
+local function inventoryFilterFunctionTool(item)
     return (item ~= nil and item.itemType == TYPE_TOOL)
 end
 
-local function inventoryStorageFunctionEquipment(item)
-    return inventoryStorageFunctionWeapon(item) or 
-            inventoryStorageFunctionArmor(item) or inventoryStorageFunctionTool(item)
+local function inventoryFilterFunctionEquipment(item)
+    return inventoryFilterFunctionWeapon(item) or 
+            inventoryFilterFunctionArmor(item) or inventoryFilterFunctionTool(item)
 end
 
+local function buttonAddInventory(button, item)
+    --todo set the something to -1 I guess
+    
+end
 
+local function buttonAddCrewmem(button, item)
+    --todo set the something to crewId
+end
 
 
 local function animRenderFunction(animation)
@@ -187,11 +248,11 @@ local ARMOR_BUTTON_SUFFIX = "_armor_button"
 local TOOL_BUTTON_SUFFIX = "_tool_button"
 local INVENTORY_BUTTON_PREFIX = "inventory_button_"
 
-local crewLineHeight = 30
-local crewLinePadding = 20
-local crewRowPadding = 10
-local crewLineNameWidth = 90
-local crewLineTextSize = 11
+local mCrewLineHeight = 30
+local mCrewLinePadding = 20
+local mCrewRowPadding = 10
+local mCrewLineNameWidth = 90
+local mCrewLineTextSize = 11
 
 local inventoryButtons = {}
 
@@ -202,12 +263,13 @@ local function buildInventoryContainer()
     local verticalContainer = lwui.buildVerticalContainer(655, 137, 300, 20, tabOneStandardVisibility, NOOP,
             {}, false, true, 7)
     for i=1,inventoryRows do
-        local horizContainer = lwui.buildHorizontalContainer(0, 0, 100, crewLineHeight, tabOneStandardVisibility, NOOP,
+        local horizContainer = lwui.buildHorizontalContainer(0, 0, 100, mCrewLineHeight, tabOneStandardVisibility, NOOP,
             {}, true, false, 7)
         for j=1,inventoryColumns do
             local buttonNum = ((i - 1) * inventoryRows) + j
-            local button = lwui.buildInventoryButton(WEAPON_BUTTON_SUFFIX..buttonNum, 0, 0, crewLineHeight, crewLineHeight,
-                    tabOneStandardVisibility, lwui.solidRectRenderFunction(Graphics.GL_Color(1, .5, 0, 1)), inventoryStorageFunctionEquipment)
+            local button = lwui.buildInventoryButton(WEAPON_BUTTON_SUFFIX..buttonNum, 0, 0, mCrewLineHeight, mCrewLineHeight,
+                    tabOneStandardVisibility, lwui.solidRectRenderFunction(Graphics.GL_Color(1, .5, 0, 1)),
+                    inventoryFilterFunctionEquipment, buttonAddInventory)
             horizContainer.addObject(button)
             table.insert(inventoryButtons, button)
         end
@@ -216,6 +278,21 @@ local function buildInventoryContainer()
     return verticalContainer
 end
 
+--todo toggle active buttons based on crew type.
+local function buildCrewRow(crewmem)
+    local nameText = lwui.buildFixedTextBox(0, 0, mCrewLineNameWidth, mCrewLineHeight, tabOneStandardVisibility, mCrewLineTextSize)
+    nameText.text = crewmem:GetName()
+    local weaponButton = lwui.buildInventoryButton(crewmem.extend.selfId..WEAPON_BUTTON_SUFFIX, 0, 0, mCrewLineHeight, mCrewLineHeight,
+        tabOneStandardVisibility, lwui.solidRectRenderFunction(Graphics.GL_Color(1, .5, 0, 1)), inventoryFilterFunctionWeapon, buttonAddCrewmem)
+    local armorButton = lwui.buildInventoryButton(crewmem.extend.selfId..ARMOR_BUTTON_SUFFIX, 0, 0, mCrewLineHeight, mCrewLineHeight,
+        tabOneStandardVisibility, lwui.solidRectRenderFunction(Graphics.GL_Color(1, .5, 0, 1)), inventoryFilterFunctionArmor, buttonAddCrewmem)
+    local toolButton = lwui.buildInventoryButton(crewmem.extend.selfId..TOOL_BUTTON_SUFFIX, 0, 0, mCrewLineHeight, mCrewLineHeight,
+        tabOneStandardVisibility, lwui.solidRectRenderFunction(Graphics.GL_Color(1, .5, 0, 1)), inventoryFilterFunctionTool, buttonAddCrewmem)
+    local horizContainer = lwui.buildHorizontalContainer(3, 0, 100, mCrewLineHeight, tabOneStandardVisibility, NOOP,
+        {nameText, weaponButton, armorButton, toolButton}, true, false, mCrewLinePadding)
+    horizContainer.GEX_crewId = crewmem.extend.selfId
+    return horizContainer
+end
 
 local function buildCrewEquipmentScrollBar()
     local crewScrollBar
@@ -224,21 +301,10 @@ local function buildCrewEquipmentScrollBar()
     local playerCrew = lwl.getAllMemberCrew(ownshipManager)
     
     local verticalContainer = lwui.buildVerticalContainer(0, 0, 300, 20, tabOneStandardVisibility, NOOP,
-        {nameText, weaponButton, armorButton, toolButton}, false, true, crewRowPadding)
+        {nameText, weaponButton, armorButton, toolButton}, false, true, mCrewRowPadding)
     
     for i=1,#playerCrew do
-        local crewmem = playerCrew[i]
-        local nameText = lwui.buildFixedTextBox(0, 0, crewLineNameWidth, crewLineHeight, tabOneStandardVisibility, crewLineTextSize)
-        nameText.text = crewmem:GetName()
-        local weaponButton = lwui.buildInventoryButton(crewmem.extend.selfId..WEAPON_BUTTON_SUFFIX, 0, 0, crewLineHeight, crewLineHeight,
-            tabOneStandardVisibility, lwui.solidRectRenderFunction(Graphics.GL_Color(1, .5, 0, 1)), inventoryStorageFunctionWeapon)
-        local armorButton = lwui.buildInventoryButton(crewmem.extend.selfId..ARMOR_BUTTON_SUFFIX, 0, 0, crewLineHeight, crewLineHeight,
-            tabOneStandardVisibility, lwui.solidRectRenderFunction(Graphics.GL_Color(1, .5, 0, 1)), inventoryStorageFunctionArmor)
-        local toolButton = lwui.buildInventoryButton(crewmem.extend.selfId..TOOL_BUTTON_SUFFIX, 0, 0, crewLineHeight, crewLineHeight,
-            tabOneStandardVisibility, lwui.solidRectRenderFunction(Graphics.GL_Color(1, .5, 0, 1)), inventoryStorageFunctionTool)
-        local horizContainer = lwui.buildHorizontalContainer(3, 0, 100, crewLineHeight, tabOneStandardVisibility, NOOP,
-            {nameText, weaponButton, armorButton, toolButton}, true, false, crewLinePadding)
-        verticalContainer.addObject(horizContainer)
+        verticalContainer.addObject(buildCrewRow(playerCrew[i]))
     end
     --create a linear array of things.  This means containers need a render outside boundaries argument.
     --renderContentOutsideBounds
@@ -248,8 +314,8 @@ end
 
 local function constructEnhancementsLayout()
     local ib1 = lwui.buildInventoryButton(name, 300, 30, EQUIPMENT_ICON_SIZE + 2, EQUIPMENT_ICON_SIZE + 2, tabOneStandardVisibility,
-    lwui.solidRectRenderFunction(Graphics.GL_Color(1, .5, 0, 1)), inventoryStorageFunctionEquipment)
-    ib1.addItem(seal_head) --TODO this seems to not be being added properly.
+    lwui.solidRectRenderFunction(Graphics.GL_Color(1, .5, 0, 1)), inventoryFilterFunctionEquipment, NOOP)
+    ib1.addItem(seal_head)
     
     
     --It's a bunch of inventory buttons, representing how many slots you have to hold this stuff you don't have equipped currently.
@@ -268,7 +334,8 @@ local function constructEnhancementsLayout()
             function() print("thing dided") end, NOOP)
 
     --Left hand side
-    local crewListScrollWindow = lwui.buildVerticalScrollContainer(341, 139, 265, 400, tabOneStandardVisibility, buildCrewEquipmentScrollBar(), lwui.testScrollBarSkin)
+    mCrewListContainer = buildCrewEquipmentScrollBar()
+    local crewListScrollWindow = lwui.buildVerticalScrollContainer(341, 139, 265, 400, tabOneStandardVisibility, mCrewListContainer, lwui.defaultScrollBarSkin)
 
     lwui.addTopLevelObject(crewListScrollWindow)
     lwui.addTopLevelObject(descriptionTextScrollWindow)
@@ -280,6 +347,7 @@ end
 
 
 local mSetupFinished = false
+--todo a button that makes items for testing
 
 local mEquipmentList = {}
 local KEY_NUM_EQUIPS = "GEX_CURRENT_EQUIPMENT_TOTAL"
@@ -287,12 +355,13 @@ local KEY_EQUIPMENT_GENERATING_INDEX = "GEX_EQUIPMENT_GENERATING_INDEX_"
 local KEY_EQUIPMENT_ASSIGNMENT = "GEX_EQUIPMENT_ASSIGNMENT_"
 
 local function persistEquipment()
-    local numEquipment = #mEquipmentList
+    local numEquipment = mItemList.length
     Hyperspace.metaVariables[KEY_NUM_EQUIPS] = numEquipment
     for i=1,numEquipment do
-        local equipment = mItemList[i]
+        --[[local equipment = mItemList:get(i)
         Hyperspace.metaVariables[KEY_EQUIPMENT_GENERATING_INDEX..i] = equipment.generating_index --todo probably a better way to do this
-        Hyperspace.metaVariables[KEY_EQUIPMENT_ASSIGNMENT..i] = equipment.assigned_slot
+        Hyperspace.metaVariables[KEY_EQUIPMENT_ASSIGNMENT..i] = equipment.assigned_slot--todo I need to set this value properly--]]
+        print("persisting ", i)
     end
 end
 
@@ -300,13 +369,18 @@ local function loadPersistedEquipment()
     local numEquipment = Hyperspace.metaVariables[KEY_NUM_EQUIPS]
     for i=1,numEquipment do
         local generationTableIndex = Hyperspace.metaVariables[KEY_EQUIPMENT_GENERATING_INDEX..i]
-        local equip = equipmentGenerationTable[generationTableIndex]()
+        local item = equipmentGenerationTable[generationTableIndex]()
         local position = Hyperspace.metaVariables[KEY_EQUIPMENT_ASSIGNMENT..i]
+        mItemList:append(item)
         if position == -1 then
-            addToInventory(equip)
+            addToInventory(item)
         else
+            --I'll give rows a custom field because you can do that with my library.  id=number or smth.  then iterate over the buttons until one accepts the item.
+            --find button
+            -- if not oldPersonsbutton.addItem(equip) then print("ERROR: Failed to load item ", equip.name) end
             --figure out how to get it onto its person.
         end
+        print("loaded item ", item.name, position)
     end
 end
 
@@ -316,7 +390,7 @@ Everything except for which equipment goes where is something we can build witho
 With that in mind, I propose a new format
 Number of equipment currently in use
 equipment_N: gives the index of the equipment generating function array used to make this equipment.
-equipment_location_N: gives -1 for inventory slot, or crewId if attached to a crew member.
+equipment_location_N: gives -2 if no longer in use, -1 for inventory slot, or crewId if attached to a crew member.
 that's it, no fancy saving or loading stuff.
 --]]
 
@@ -330,7 +404,7 @@ if (script) then
             mSetupFinished = true
             constructEnhancementsLayout()
             mCrewChangeObserver.saveLastSeenState()
-            --loadPersistedEquipment()
+            loadPersistedEquipment()
         end
         --print("tab name "..tabName)
         if tabName == ENHANCEMENTS_TAB_NAME then
@@ -338,20 +412,46 @@ if (script) then
                 --todo rebuild based on missing/added crew
                 local addedCrew = mCrewChangeObserver.getAddedCrew()
                 local removedCrew = mCrewChangeObserver.getRemovedCrew()
-                for i=1,#removedCrew do
+                for _, crewmem in ipairs(removedCrew) do
+                    print("removing ", crewmem:GetName())
+                    local removedLines = {}
                     --remove existing row
+                    for _, crewContainer in ipairs(mCrewListContainer.objects) do
+                        print("checking row ", crewContainer.GEX_crewId)
+                        if (crewContainer.GEX_crewId == crewmem.extend.selfId) then
+                            print("found match! ")
+                            print("there were N crew ", #mCrewListContainer.objects)
+                            table.insert(removedLines, crewContainer)
+                            mCrewListContainer.objects = getNewElements(mCrewListContainer.objects, {crewContainer})--todo this is kind of experimental
+                            print("there are now N crew ", #mCrewListContainer.objects)
+                        end
+                    end
+                    --remove all the items in removedLines
+                    for _, line in ipairs(removedLines) do
+                        for _, button in ipairs(line.objects) do
+                            if (button.item) then
+                                mItemList:remove(button.item._index)
+                                print("removed item ", button.item._index)
+                            end
+                        end
+                    end
+                    --needs remove any equipped items from the mItemList, then re-persist data.
                 end
                 for i=1,#addedCrew do
-                    --add new row
+                    for _, crewmem in ipairs(addedCrew) do
+                        mCrewListContainer.addObject(buildCrewRow(crewmem))
+                    end
+                end
+                
+                if (#addedCrew > 0 or #removedCrew > 0) then
+                    print("num crew changed since last update")
+                    persistEquipment()
                 end
                 mCrewChangeObserver.saveLastSeenState()
             end
-            
-            --Persist equipment status
-            --persistEquipment()
         end
         mTabbedWindow = tabName
-    end)
+    end)--todo persist after tab window closed, probably. not on jump.
 end
 
 --In the crew loop, each crew will check the items assigned to them and call their onTick functions, (pass themselves in?)
