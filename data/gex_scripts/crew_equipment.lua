@@ -177,6 +177,7 @@ local WEAPON_BUTTON_SUFFIX = "_weapon_button"
 local ARMOR_BUTTON_SUFFIX = "_armor_button"
 local TOOL_BUTTON_SUFFIX = "_tool_button"
 local INVENTORY_BUTTON_PREFIX = "inventory_button_"
+local NO_ITEM_SELECTED_TEXT = "--- None Selected ---"
 
 local mEquipmentList = {}
 local KEY_NUM_EQUIPS = "GEX_CURRENT_EQUIPMENT_TOTAL"
@@ -199,6 +200,8 @@ local mCrewRowPadding = 10
 local mCrewLineNameWidth = 90
 local mCrewLineTextSize = 11
 
+local mDescriptionHeader
+local mDescriptionTextBox
 local mInventoryButtons = {}
 
 local inventoryRows = 5
@@ -305,7 +308,7 @@ local function addToCrew(item, crewId)
     end
     return false
 end
-    
+
 persistEquipment = function()
     local numEquipment = mItemList.length
     print("persisting ", numEquipment, " items")
@@ -409,27 +412,26 @@ end
 
 local function constructEnhancementsLayout()
     local ib1 = lwui.buildInventoryButton(name, 300, 30, EQUIPMENT_ICON_SIZE + 2, EQUIPMENT_ICON_SIZE + 2, tabOneStandardVisibility,
-    lwui.solidRectRenderFunction(Graphics.GL_Color(1, .5, 0, 1)), inventoryFilterFunctionEquipment, NOOP)
+    lwui.solidRectRenderFunction(Graphics.GL_Color(1, .5, 0, 1)), inventoryFilterFunctionEquipment, NOOP)--todo remove this testing element
     ib1.addItem(mEquipmentGenerationTable[2]())--mNameToItemIndexTable["Seal Head"]]())--todo make a table of names to indexes.
-
-    --Lower right corner
-    local descriptionTextBox = lwui.buildDynamicHeightTextBox(0, 0, 215, 90, tabOneStandardVisibility, 10)
-    local descriptionTextScrollWindow = lwui.buildVerticalScrollContainer(643, 384, 260, 150, tabOneStandardVisibility, descriptionTextBox, lwui.testScrollBarSkin)
-    local longString = "Ok so this is a pretty long text box that's probably going to overflow the bounds of the text that created it lorum donor kit mama, consecutur rivus alterna nunc provinciamus."
-    descriptionTextBox.text = longString
-
-
-
-    local b3 = lwui.buildButton(300, 400, 25, 10, tabOneStandardVisibility, lwui.solidRectRenderFunction(Graphics.GL_Color(1, 0, 0, 1)),
-            function() print("thing dided") end, NOOP)
 
     --Left hand side
     mCrewListContainer = buildCrewEquipmentScrollBar()
     local crewListScrollWindow = lwui.buildVerticalScrollContainer(341, 139, 265, 400, tabOneStandardVisibility, mCrewListContainer, lwui.defaultScrollBarSkin)
-
     lwui.addTopLevelObject(crewListScrollWindow)
-    lwui.addTopLevelObject(descriptionTextScrollWindow)
     lwui.addTopLevelObject(ib1)
+    
+        --653, 334
+        --Lower right corner
+    mDescriptionHeader = lwui.buildFixedTextBox(660, 343, 215, 40, tabOneStandardVisibility, 18)
+    mDescriptionHeader.text = NO_ITEM_SELECTED_TEXT
+    lwui.addTopLevelObject(mDescriptionHeader)
+    mDescriptionTextBox = lwui.buildDynamicHeightTextBox(0, 0, 215, 90, tabOneStandardVisibility, 10)
+    local descriptionTextScrollWindow = lwui.buildVerticalScrollContainer(643, 384, 260, 150, tabOneStandardVisibility, mDescriptionTextBox, lwui.testScrollBarSkin)
+    local longString = "Ok so this is a pretty long text box that's probably going to overflow the bounds of the text that created it lorum donor kit mama, consecutur rivus alterna nunc provinciamus."
+    mDescriptionTextBox.text = longString
+    lwui.addTopLevelObject(descriptionTextScrollWindow)
+
     --Upper right corner
     --It's a bunch of inventory buttons, representing how many slots you have to hold this stuff you don't have equipped currently.
     --When things get added to the inventory, they'll find the first empty slot here.   So I need to group these buttons in a list somewhere.
@@ -474,8 +476,24 @@ if (script) then
         end
         --print("tab name "..tabName)
         if tabName == ENHANCEMENTS_TAB_NAME then
+            --description rendering
+            local buttonContents = nil
+            if (lwui.mHoveredButton ~= nil) then
+                buttonContents = lwui.mHoveredButton.item
+            end
+            if (lwui.mClickedButton ~= nil) then
+                buttonContents = lwui.mClickedButton.item
+            end
+            if (buttonContents) then
+                mDescriptionHeader.text = buttonContents.name
+                mDescriptionTextBox.text = buttonContents.description
+            else
+                mDescriptionHeader.text = NO_ITEM_SELECTED_TEXT
+                mDescriptionTextBox.text = ""
+            end
+            
             if not (mTabbedWindow == ENHANCEMENTS_TAB_NAME) then
-                --todo rebuild based on missing/added crew
+                --rebuild based on missing/added crew
                 local addedCrew = mCrewChangeObserver.getAddedCrew()
                 local removedCrew = mCrewChangeObserver.getRemovedCrew()
                 for _, crewmem in ipairs(removedCrew) do
