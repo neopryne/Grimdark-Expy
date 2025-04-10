@@ -1,166 +1,24 @@
 if (not mods) then mods = {} end
 local lwl = mods.lightweight_lua
 local lwui = mods.lightweight_user_interface
+local lwcco = mods.lightweight_crew_change_observer
+local lwsil = mods.lightweight_self_indexing_list
 --local userdata_table = mods.multiverse.userdata_table
 
 --[[
 --TODO my scroll nub scaling math is very off.
 
+Upon starting a new run, delete all inventory.
 
-For the things I need for the UI to actually work, upon your crew list changing, (#crew changes, I think this works with people getting kicked off),
-the crew scrollbar is regenerated.  Or at least the content is wiped and replaced with a new button list.
---Uh.  Maybe not, we do need to keep track of who has which equipment, and this is something we need to put in metatables as well.
-The metavars should probably be the source of truth for who has what, and I rebuild the tables to reflect that.
-Otherwise I could see messing up to easily.
---Probably a list of items and who owns them (-1 for inventory)
---No, that doesn't allow for duplicates.
-Each crew will have three slots, which will be used for tracking what equipment they have in those slots.
-Inventory will be INVENTORY_TYPE_N and hold the same.
-Inventory is a lot easier to keep track of, as I know when that value changes.
-    Once a crew is no longer on the ship, delete their inventory.
-    Upon starting a new run, delete all inventory.
 
-Here's how I build my memory:
-NumCrew = n
-GEX_CREW_[1-N]: IDs of those crewmembers
-GEX_CREW_[ID]_[TYPE]: ID of equipment of that type equipped to crewmember.
-Actually besides the type line, this is strong enough to put in LWL and consume it in MSCP, SICC, and GEX (this).
-
-only need to build this list when opening this menu for the first time.  
-
-here we get to the part that kind of conflicts when you have a GUI pushing up against active inventory.  I really don't want to rebuild Items, because each item should be something that persists with the users of said item.  I don't need to rebuild the inventory window, that can stay since it never gets invalidated.
 However, the crew list is a different story.  I need to make sure that the people who are there are supposed to be there.  Recovering items upon crew loss is probably impossible.
 If a crew dies to damage without clonebay, we should be able to save the items though.
-This is enough of an issue that I probably need to put something into the library to handle this.  Incongruity between seen and felt reality.
 TODO give different crew types different equipment slots.  Uniques and humans get all of them.  Likely elites as well.
-
-currentItems[]: all item instances in the player's possession.  Each item instance will have a link back to the kind of item it is, or be generated from such a function.
-There is a need to have a library that tracks which crew you have.  This is currently hard.
-Basically, it should keep track of the crewIds on your ship, and understand how to update itself if that list changes.
-It lets users register the point that they know about, and tells them what changed since then.
-As usual, I'll build it inside this and pull it into lwl after its tested.
-I don't need all this hooha if I can update the crew list in real time.  Then I don't have to recreate the whole thing from scratch each time, which is much better in many ways.
-However, there's no getting around needing to reconstruct the UI upon loading.
 
 --Also note that due to how I've constructed this, items may stick around after the crew using them has died, so I need to make sure the calls don't error.
 --]]
 
 --class needed for item storage, move this to lwl once things work.
-local SelfIndexingList = {}
-SelfIndexingList.__index = SelfIndexingList
-
-function SelfIndexingList:new()
-	local list = {
-		items = {},
-		length = 0
-	}
-	setmetatable(list, self)
-	return list
-end
-
--- Append a new item
-function SelfIndexingList:append(item)
-	self.length = self.length + 1
-	item._index = self.length
-	self.items[self.length] = item
-end
-
--- Remove an item by index
-function SelfIndexingList:remove(index)
-	if index < 1 or index > self.length then return end
-
-	table.remove(self.items, index)
-	self.length = self.length - 1
-
-	-- Reassign indices
-	for i = index, self.length do
-		self.items[i]._index = i
-	end
-end
-
--- Get item by index
-function SelfIndexingList:get(index)
-	return self.items[index]
-end
-
--- Get item by index
-function SelfIndexingList:size()
-	return self.length
-end
-
--- Print all items' indices
-function SelfIndexingList:print()
-	for i, item in ipairs(self.items) do
-		print(i, "=>", item._index)
-	end
-end
-
-
-local function getNewElements(newSet, initialSet)
-    elements = {}
-    for _, newElement in ipairs(newSet) do
-        local wasPresent = false
-        for _, oldElement in ipairs(initialSet) do
-            if (oldElement == newElement) then
-                wasPresent = true
-                break
-            end
-        end
-        if not wasPresent then
-            table.insert(elements, newElement)
-        end
-    end
-    
-    return elements
-end
-
-local mCrewChangeObservers = {}
-if (script) then
-    script.on_internal_event(Defines.InternalEvents.ON_TICK, function()
-        --Initialization code
-        if not mGlobal then
-            mGlobal = Hyperspace.Global.GetInstance()
-        end
-        local ownshipManager = mGlobal:GetShipManager(0)
-        if (ownshipManager) then
-            --update mCrewIds
-            local playerCrew = lwl.getAllMemberCrew(ownshipManager)
-            for _, crewChangeObserver in ipairs(mCrewChangeObservers) do
-                crewChangeObserver.crew = {}
-                for i=1,#playerCrew do
-                    table.insert(crewChangeObserver.crew, playerCrew[i])--todo check if this compares correctly.
-                end
-            end
-        end
-    end)
-end
-
---move this to a library.  Making this track crew for better utility
-function createCrewChangeObserver()
-    local crewChangeObserver = {}
-    crewChangeObserver.crew = {}
-    crewChangeObserver.lastSeenCrew = {}
-
-    --actually no, just return a new object to all consumers so they don't conflict.
-    local function saveLastSeenState()
-        crewChangeObserver.lastSeenCrew = lwl.deepCopyTable(crewChangeObserver.crew)
-    end
-    --local function hasStateChanged()
-    --Return arrays of the crew diff from last save.
-    local function getAddedCrew()
-        return getNewElements(crewChangeObserver.crew, crewChangeObserver.lastSeenCrew)
-    end
-    local function getRemovedCrew()
-        return getNewElements(crewChangeObserver.lastSeenCrew, crewChangeObserver.crew)
-    end
-    
-    crewChangeObserver.saveLastSeenState = saveLastSeenState
-    crewChangeObserver.getAddedCrew = getAddedCrew
-    crewChangeObserver.getRemovedCrew = getRemovedCrew
-    table.insert(mCrewChangeObservers, crewChangeObserver)
-    return crewChangeObserver
-end
-
 
 ----------------------------------------------------LIBRARY FUNCTIONS END----------------------
 local function NOOP() end
@@ -185,7 +43,7 @@ local KEY_EQUIPMENT_GENERATING_INDEX = "GEX_EQUIPMENT_GENERATING_INDEX_"
 local KEY_EQUIPMENT_ASSIGNMENT = "GEX_EQUIPMENT_ASSIGNMENT_"
 
 local mSetupFinished = false
-local mCrewChangeObserver = createCrewChangeObserver()
+local mCrewChangeObserver = lwcco.createCrewChangeObserver()
 local mCrewListContainer
 local mEquipmentGenerationTable = {}
 local mNameToItemIndexTable = {}
@@ -193,7 +51,7 @@ local mTabbedWindow = ""
 local mTab = 1
 local mGlobal = Hyperspace.Global.GetInstance()
 --Items must be added to this list when they are created or loaded
-local mItemList = SelfIndexingList:new()
+local mItemList = lwsil.SelfIndexingList:new()
 local mCrewLineHeight = 30
 local mCrewLinePadding = 20
 local mCrewRowPadding = 10
@@ -476,7 +334,7 @@ if (script) then
         end
         --print("tab name "..tabName)
         if tabName == ENHANCEMENTS_TAB_NAME then
-            --description rendering
+            --description rendering, last hovered item will persist until window refreshed.
             local buttonContents = nil
             if (lwui.mHoveredButton ~= nil) then
                 buttonContents = lwui.mHoveredButton.item
@@ -487,12 +345,11 @@ if (script) then
             if (buttonContents) then
                 mDescriptionHeader.text = buttonContents.name
                 mDescriptionTextBox.text = buttonContents.description
-            else
-                mDescriptionHeader.text = NO_ITEM_SELECTED_TEXT
-                mDescriptionTextBox.text = ""
             end
             
             if not (mTabbedWindow == ENHANCEMENTS_TAB_NAME) then
+                mDescriptionHeader.text = NO_ITEM_SELECTED_TEXT
+                mDescriptionTextBox.text = ""
                 --rebuild based on missing/added crew
                 local addedCrew = mCrewChangeObserver.getAddedCrew()
                 local removedCrew = mCrewChangeObserver.getRemovedCrew()
@@ -506,7 +363,7 @@ if (script) then
                             print("found match! ")
                             print("there were N crew ", #mCrewListContainer.objects)
                             table.insert(removedLines, crewContainer)
-                            mCrewListContainer.objects = getNewElements(mCrewListContainer.objects, {crewContainer})--todo this is kind of experimental
+                            mCrewListContainer.objects = lwl.getNewElements(mCrewListContainer.objects, {crewContainer})--todo this is kind of experimental
                             print("there are now N crew ", #mCrewListContainer.objects)
                         end
                     end
