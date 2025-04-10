@@ -162,9 +162,7 @@ function createCrewChangeObserver()
 end
 
 
-
-
-
+----------------------------------------------------LIBRARY FUNCTIONS END----------------------
 local function NOOP() end
 local ENHANCEMENTS_TAB_NAME = "crew_enhancements"
 local EQUIPMENT_SUBTAB_INDEX = 1
@@ -172,15 +170,40 @@ local TYPE_WEAPON = "type_weapon"
 local TYPE_ARMOR = "type_armor"
 local TYPE_TOOL = "type_tool"
 local EQUIPMENT_ICON_SIZE = 30 --todo adjust as is good
+local GEX_CREW_ID = "GEX_crewId"
+--todo a button that makes items for testing
 
+local WEAPON_BUTTON_SUFFIX = "_weapon_button"
+local ARMOR_BUTTON_SUFFIX = "_armor_button"
+local TOOL_BUTTON_SUFFIX = "_tool_button"
+local INVENTORY_BUTTON_PREFIX = "inventory_button_"
+
+local mEquipmentList = {}
+local KEY_NUM_EQUIPS = "GEX_CURRENT_EQUIPMENT_TOTAL"
+local KEY_EQUIPMENT_GENERATING_INDEX = "GEX_EQUIPMENT_GENERATING_INDEX_"
+local KEY_EQUIPMENT_ASSIGNMENT = "GEX_EQUIPMENT_ASSIGNMENT_"
+
+local mSetupFinished = false
 local mCrewChangeObserver = createCrewChangeObserver()
 local mCrewListContainer
-
+local mEquipmentGenerationTable = {}
+local mNameToItemIndexTable = {}
 local mTabbedWindow = ""
 local mTab = 1
 local mGlobal = Hyperspace.Global.GetInstance()
 --Items must be added to this list when they are created or loaded
 local mItemList = SelfIndexingList:new()
+local mCrewLineHeight = 30
+local mCrewLinePadding = 20
+local mCrewRowPadding = 10
+local mCrewLineNameWidth = 90
+local mCrewLineTextSize = 11
+
+local mInventoryButtons = {}
+
+local inventoryRows = 5
+local inventoryColumns = 6
+local persistEquipment
 
 --local mPage = 1--used to calculate which crew are displayed in the equipment loadout slots.  basically mPage % slots per page. Or do the scrolly thing, it's easier than I thought.
 local function generateStandardVisibilityFunction(tabName, subtabIndex)
@@ -192,15 +215,28 @@ local function generateStandardVisibilityFunction(tabName, subtabIndex)
 end
 local tabOneStandardVisibility = generateStandardVisibilityFunction(ENHANCEMENTS_TAB_NAME, EQUIPMENT_SUBTAB_INDEX)
 
+--todo maybe helper functions to build items?  idk im not happy with this yet.
+local function buildItemBuilder(name, itemType, renderFunction, description, onCreate, onTick)
+    local generating_index = #mEquipmentGenerationTable + 1
+    return function()
+        local builtItem = lwui.buildItem(name, itemType, EQUIPMENT_ICON_SIZE, EQUIPMENT_ICON_SIZE,
+                tabOneStandardVisibility, renderFunction, description, onCreate, onTick)
+        builtItem.generating_index = generating_index
+        mNameToItemIndexTable[name] = generating_index
+        print("built item from index ", generating_index)
+        mItemList:append(builtItem)
+        return builtItem
+    end
+end
+
 ------------------------------------ITEM DEFINITIONS----------------------------------------------------------
 --TODO need to make an array (enum) of these so I can get to them by index, the only thing I can store in a metavar.
-local three_way = lwui.buildItem("Three-Way", TYPE_WEAPON, EQUIPMENT_ICON_SIZE, EQUIPMENT_ICON_SIZE, tabOneStandardVisibility, lwui.solidRectRenderFunction(Graphics.GL_Color(1, 1, .8, 1)),
-        "Hit two more people at the cost of decreased damage.", NOOP, NOOP)
-local seal_head = lwui.buildItem("Seal Head", TYPE_ARMOR, EQUIPMENT_ICON_SIZE, EQUIPMENT_ICON_SIZE, tabOneStandardVisibility, lwui.solidRectRenderFunction(Graphics.GL_Color(1, .8, 1, 1)),
-        "The headbutts it enables are an effective counter to and ridicule you might come under from wearing such odd headgear.", NOOP, NOOP)
+--todo this doesn't have access to the index of the thing properly, I should just make a thing that gets and incs itself.
+table.insert(mEquipmentGenerationTable, buildItemBuilder("Three-Way", TYPE_WEAPON, lwui.solidRectRenderFunction(Graphics.GL_Color(1, 1, .8, 1)), "Hit two more people at the cost of decreased damage.", NOOP, NOOP))
+table.insert(mEquipmentGenerationTable, buildItemBuilder("Seal Head", TYPE_ARMOR, lwui.solidRectRenderFunction(Graphics.GL_Color(1, .8, 1, 1)), "The headbutts it enables are an effective counter to the ridicule you might encounter for wearing such odd headgear.", NOOP, NOOP))
 local netgear = lwui.buildItem("Netgear", TYPE_TOOL, EQUIPMENT_ICON_SIZE, EQUIPMENT_ICON_SIZE, tabOneStandardVisibility, lwui.solidRectRenderFunction(Graphics.GL_Color(.8, 1, 1, 1)),
-        "It's gear made of nets.  Also serves as a wireless access point. Cooldown: two minutes.  Deploy nets in a room to slow all movement through it for twenty five seconds by 60%.  Single use for some reason.", NOOP, NOOP)
-print("seal head is: ", seal_head.itemType)
+        "A small disk which when deployed releases entangling nets.  Also serves as a wireless access point. Cooldown: two minutes.  Deploy nets in a room to slow all movement through it for twenty five seconds by 60%.  Single use for some reason.", NOOP, NOOP)
+
 
 ------------------------------------INVENTORY FILTER FUNCTIONS----------------------------------------------------------
 
@@ -227,38 +263,95 @@ end
 
 local function buttonAddInventory(button, item)
     --todo set the something to -1 I guess
-    
+    item.assigned_slot = -1
+    persistEquipment()
 end
 
 local function buttonAddCrewmem(button, item)
-    --todo set the something to crewId
+    item.assigned_slot = button[GEX_CREW_ID]
+    persistEquipment()
 end
 
 
-local function animRenderFunction(animation)
-    
-    
-end
 --Consider putting a row on top with the names of the column things.
-
 --  Name, Weapon, Armor, Tool
 
-local WEAPON_BUTTON_SUFFIX = "_weapon_button"
-local ARMOR_BUTTON_SUFFIX = "_armor_button"
-local TOOL_BUTTON_SUFFIX = "_tool_button"
-local INVENTORY_BUTTON_PREFIX = "inventory_button_"
 
-local mCrewLineHeight = 30
-local mCrewLinePadding = 20
-local mCrewRowPadding = 10
-local mCrewLineNameWidth = 90
-local mCrewLineTextSize = 11
+------------------------------------ITEM STORAGE FUNCTIONS----------------------------------------------------------
+--returns true if the item was able to be added, and false if there was no room.  Called when loading persisted inventory items or when obtaining new ones.
+local function addToInventory(item)
+    for _, iButton in ipairs(mInventoryButtons) do
+        if (iButton.addItem(item)) then
+            return true
+        end
+    end
+    return false
+end
 
-local inventoryButtons = {}
+local function addToCrew(item, crewId)
+    for _, crewContainer in ipairs(mCrewListContainer.objects) do
+        print("checking row ", crewContainer[GEX_CREW_ID])
+        if (crewContainer[GEX_CREW_ID] == crewId) then
+            print("crew found, adding ", item.name)
+            for _, iButton in ipairs(crewContainer.objects) do
+                if (iButton.className == "inventoryButton") then
+                    print("trying to add item to ", iButton.className)
+                    if iButton.addItem(item) then
+                        return true
+                    end
+                end
+            end
+        end
+    end
+    return false
+end
+    
+persistEquipment = function()
+    local numEquipment = mItemList.length
+    print("persisting ", numEquipment, " items")
+    local successes = 0
+    for i=1,numEquipment do
+        local equipment = mItemList:get(i)
+        if (equipment.generating_index == nil) or (equipment.assigned_slot == nil) then
+            print("ERROR: could not persist item: incomplete values.")
+        else
+            successes = successes + 1
+            print("persisting ", equipment.name, " genIndx ", equipment.generating_index, " slot ", equipment.assigned_slot)
+            Hyperspace.metaVariables[KEY_EQUIPMENT_GENERATING_INDEX..successes] = equipment.generating_index --todo create this
+            Hyperspace.metaVariables[KEY_EQUIPMENT_ASSIGNMENT..successes] = equipment.assigned_slot--todo I need to set this value properly
+        end
+    end
+    Hyperspace.metaVariables[KEY_NUM_EQUIPS] = successes
+    print("persisted ", successes , " out of ", numEquipment)
+end
 
+local function resetPersistedValues()
+    Hyperspace.metaVariables[KEY_NUM_EQUIPS] = 0
+end
 
-local inventoryRows = 5
-local inventoryColumns = 6
+local function loadPersistedEquipment()
+    local numEquipment = Hyperspace.metaVariables[KEY_NUM_EQUIPS]
+    print("loading ", numEquipment, " items")
+    for i=1,numEquipment do
+        local generationTableIndex = Hyperspace.metaVariables[KEY_EQUIPMENT_GENERATING_INDEX..i]
+        print("index ", generationTableIndex)
+        local item = mEquipmentGenerationTable[generationTableIndex]()
+        local position = Hyperspace.metaVariables[KEY_EQUIPMENT_ASSIGNMENT..i]
+        print("loading ", item.name, " genIndx ", item.generating_index, " slot ", item.assigned_slot)
+        if position == -1 then
+            if (addToInventory(item)) then
+                --mItemList:append(item)
+            end
+        else
+            --mItemList:append(item)
+            if not addToCrew(item, position) then
+                print("ERROR: Failed to load item ", item.name)
+            end
+        end
+        print("loaded item ", item.name, position)
+    end
+end
+
 local function buildInventoryContainer()
     local verticalContainer = lwui.buildVerticalContainer(655, 137, 300, 20, tabOneStandardVisibility, NOOP,
             {}, false, true, 7)
@@ -271,7 +364,7 @@ local function buildInventoryContainer()
                     tabOneStandardVisibility, lwui.solidRectRenderFunction(Graphics.GL_Color(1, .5, 0, 1)),
                     inventoryFilterFunctionEquipment, buttonAddInventory)
             horizContainer.addObject(button)
-            table.insert(inventoryButtons, button)
+            table.insert(mInventoryButtons, button)
         end
         verticalContainer.addObject(horizContainer)
     end
@@ -290,7 +383,11 @@ local function buildCrewRow(crewmem)
         tabOneStandardVisibility, lwui.solidRectRenderFunction(Graphics.GL_Color(1, .5, 0, 1)), inventoryFilterFunctionTool, buttonAddCrewmem)
     local horizContainer = lwui.buildHorizontalContainer(3, 0, 100, mCrewLineHeight, tabOneStandardVisibility, NOOP,
         {nameText, weaponButton, armorButton, toolButton}, true, false, mCrewLinePadding)
-    horizContainer.GEX_crewId = crewmem.extend.selfId
+    --kind of dirty to apply it to all of these but it's not that bad.
+    horizContainer[GEX_CREW_ID] = crewmem.extend.selfId
+    weaponButton[GEX_CREW_ID] = crewmem.extend.selfId
+    armorButton[GEX_CREW_ID] = crewmem.extend.selfId
+    toolButton[GEX_CREW_ID] = crewmem.extend.selfId
     return horizContainer
 end
 
@@ -306,8 +403,6 @@ local function buildCrewEquipmentScrollBar()
     for i=1,#playerCrew do
         verticalContainer.addObject(buildCrewRow(playerCrew[i]))
     end
-    --create a linear array of things.  This means containers need a render outside boundaries argument.
-    --renderContentOutsideBounds
     
     return verticalContainer
 end
@@ -315,13 +410,8 @@ end
 local function constructEnhancementsLayout()
     local ib1 = lwui.buildInventoryButton(name, 300, 30, EQUIPMENT_ICON_SIZE + 2, EQUIPMENT_ICON_SIZE + 2, tabOneStandardVisibility,
     lwui.solidRectRenderFunction(Graphics.GL_Color(1, .5, 0, 1)), inventoryFilterFunctionEquipment, NOOP)
-    ib1.addItem(seal_head)
-    
-    
-    --It's a bunch of inventory buttons, representing how many slots you have to hold this stuff you don't have equipped currently.
-    --When things get added to the inventory, they'll find the first empty slot here.   So I need to group these buttons in a list somewhere.
-    
-    
+    ib1.addItem(mEquipmentGenerationTable[2]())--mNameToItemIndexTable["Seal Head"]]())--todo make a table of names to indexes.
+
     --Lower right corner
     local descriptionTextBox = lwui.buildDynamicHeightTextBox(0, 0, 215, 90, tabOneStandardVisibility, 10)
     local descriptionTextScrollWindow = lwui.buildVerticalScrollContainer(643, 384, 260, 150, tabOneStandardVisibility, descriptionTextBox, lwui.testScrollBarSkin)
@@ -341,49 +431,11 @@ local function constructEnhancementsLayout()
     lwui.addTopLevelObject(descriptionTextScrollWindow)
     lwui.addTopLevelObject(ib1)
     --Upper right corner
+    --It's a bunch of inventory buttons, representing how many slots you have to hold this stuff you don't have equipped currently.
+    --When things get added to the inventory, they'll find the first empty slot here.   So I need to group these buttons in a list somewhere.
     lwui.addTopLevelObject(buildInventoryContainer())
     print("stuff readied")
 end
-
-
-local mSetupFinished = false
---todo a button that makes items for testing
-
-local mEquipmentList = {}
-local KEY_NUM_EQUIPS = "GEX_CURRENT_EQUIPMENT_TOTAL"
-local KEY_EQUIPMENT_GENERATING_INDEX = "GEX_EQUIPMENT_GENERATING_INDEX_"
-local KEY_EQUIPMENT_ASSIGNMENT = "GEX_EQUIPMENT_ASSIGNMENT_"
-
-local function persistEquipment()
-    local numEquipment = mItemList.length
-    Hyperspace.metaVariables[KEY_NUM_EQUIPS] = numEquipment
-    for i=1,numEquipment do
-        --[[local equipment = mItemList:get(i)
-        Hyperspace.metaVariables[KEY_EQUIPMENT_GENERATING_INDEX..i] = equipment.generating_index --todo probably a better way to do this
-        Hyperspace.metaVariables[KEY_EQUIPMENT_ASSIGNMENT..i] = equipment.assigned_slot--todo I need to set this value properly--]]
-        print("persisting ", i)
-    end
-end
-
-local function loadPersistedEquipment()
-    local numEquipment = Hyperspace.metaVariables[KEY_NUM_EQUIPS]
-    for i=1,numEquipment do
-        local generationTableIndex = Hyperspace.metaVariables[KEY_EQUIPMENT_GENERATING_INDEX..i]
-        local item = equipmentGenerationTable[generationTableIndex]()
-        local position = Hyperspace.metaVariables[KEY_EQUIPMENT_ASSIGNMENT..i]
-        mItemList:append(item)
-        if position == -1 then
-            addToInventory(item)
-        else
-            --I'll give rows a custom field because you can do that with my library.  id=number or smth.  then iterate over the buttons until one accepts the item.
-            --find button
-            -- if not oldPersonsbutton.addItem(equip) then print("ERROR: Failed to load item ", equip.name) end
-            --figure out how to get it onto its person.
-        end
-        print("loaded item ", item.name, position)
-    end
-end
-
 
 --[[
 Everything except for which equipment goes where is something we can build without special data structures storing things.
@@ -394,12 +446,26 @@ equipment_location_N: gives -2 if no longer in use, -1 for inventory slot, or cr
 that's it, no fancy saving or loading stuff.
 --]]
 
+local function printCrewIds()
+    local ownshipManager = mGlobal:GetShipManager(0)
+    if (ownshipManager) then
+        --update mCrewIds
+        local playerCrew = lwl.getAllMemberCrew(ownshipManager)
+        for i=1,#playerCrew do
+            local crewmem = playerCrew[i]
+            print(crewmem:GetName(), " has id ", crewmem.extend.selfId)
+        end
+    end
+end
+
 if (script) then
     script.on_render_event(Defines.RenderEvents.TABBED_WINDOW, function() 
         --inMenu = true --todo why?
     end, function(tabName)
         --might need to put this in the reset category.
         if not mSetupFinished then
+            printCrewIds()
+            --resetPersistedValues() --todo remove
             print("Setting up items")
             mSetupFinished = true
             constructEnhancementsLayout()
@@ -417,8 +483,8 @@ if (script) then
                     local removedLines = {}
                     --remove existing row
                     for _, crewContainer in ipairs(mCrewListContainer.objects) do
-                        print("checking row ", crewContainer.GEX_crewId)
-                        if (crewContainer.GEX_crewId == crewmem.extend.selfId) then
+                        print("checking row ", crewContainer[GEX_CREW_ID])
+                        if (crewContainer[GEX_CREW_ID] == crewmem.extend.selfId) then
                             print("found match! ")
                             print("there were N crew ", #mCrewListContainer.objects)
                             table.insert(removedLines, crewContainer)
