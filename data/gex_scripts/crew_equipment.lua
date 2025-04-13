@@ -57,13 +57,14 @@ local mCrewLinePadding = 20
 local mCrewRowPadding = 10
 local mCrewLineNameWidth = 90
 local mCrewLineTextSize = 11
+local mEquipmentTabTop = 169
 
 local mDescriptionHeader
 local mDescriptionTextBox
 local mInventoryButtons = {}
 
 local inventoryRows = 5
-local inventoryColumns = 6
+local inventoryColumns = 5
 local persistEquipment
 
 --local mPage = 1--used to calculate which crew are displayed in the equipment loadout slots.  basically mPage % slots per page. Or do the scrolly thing, it's easier than I thought.
@@ -89,15 +90,6 @@ local function buildItemBuilder(name, itemType, renderFunction, description, onC
         return builtItem
     end
 end
-
-------------------------------------ITEM DEFINITIONS----------------------------------------------------------
---TODO need to make an array (enum) of these so I can get to them by index, the only thing I can store in a metavar.
---todo this doesn't have access to the index of the thing properly, I should just make a thing that gets and incs itself.
-table.insert(mEquipmentGenerationTable, buildItemBuilder("Three-Way", TYPE_WEAPON, lwui.solidRectRenderFunction(Graphics.GL_Color(1, 1, .8, 1)), "Hit two more people at the cost of decreased damage.", NOOP, NOOP))
-table.insert(mEquipmentGenerationTable, buildItemBuilder("Seal Head", TYPE_ARMOR, lwui.solidRectRenderFunction(Graphics.GL_Color(1, .8, 1, 1)), "The headbutts it enables are an effective counter to the ridicule you might encounter for wearing such odd headgear.", NOOP, NOOP))
-local netgear = lwui.buildItem("Netgear", TYPE_TOOL, EQUIPMENT_ICON_SIZE, EQUIPMENT_ICON_SIZE, tabOneStandardVisibility, lwui.solidRectRenderFunction(Graphics.GL_Color(.8, 1, 1, 1)),
-        "A small disk which when deployed releases entangling nets.  Also serves as a wireless access point. Cooldown: two minutes.  Deploy nets in a room to slow all movement through it for twenty five seconds by 60%.  Single use for some reason.", NOOP, NOOP)
-
 
 ------------------------------------INVENTORY FILTER FUNCTIONS----------------------------------------------------------
 
@@ -133,7 +125,7 @@ local function buttonAddCrewmem(button, item)
     persistEquipment()
 end
 
-
+------------------------------------END INVENTORY FILTER FUNCTIONS----------------------------------------------------------
 --Consider putting a row on top with the names of the column things.
 --  Name, Weapon, Armor, Tool
 
@@ -165,6 +157,30 @@ local function addToCrew(item, crewId)
         end
     end
     return false
+end
+
+local function getCrewEquipment(crewmem)
+    local equipment = {}
+    if not mCrewListContainer then
+        print("equipment not set up yet")
+        return {}
+    end
+    for _, crewContainer in ipairs(mCrewListContainer.objects) do
+        print("checking row ", crewContainer[GEX_CREW_ID])
+        if (crewContainer[GEX_CREW_ID] == crewmem.extend.crewId) then
+            print("crew found")
+            for _, iButton in ipairs(crewContainer.objects) do
+                print("checking ", iButton.className)
+                if (iButton.className == "inventoryButton") then
+                    print("item ", iButton.item)
+                    if (iButton.item ~= nil) then
+                        table.insert(equipment, iButton.item)
+                    end
+                end
+            end
+        end
+    end
+    return equipment
 end
 
 persistEquipment = function()
@@ -212,9 +228,11 @@ local function loadPersistedEquipment()
         print("loaded item ", item.name, position)
     end
 end
+------------------------------------END ITEM STORAGE FUNCTIONS----------------------------------------------------------
 
+------------------------------------GUI CREATION----------------------------------------------------------
 local function buildInventoryContainer()
-    local verticalContainer = lwui.buildVerticalContainer(655, 137, 300, 20, tabOneStandardVisibility, NOOP,
+    local verticalContainer = lwui.buildVerticalContainer(655, mEquipmentTabTop, 300, 20, tabOneStandardVisibility, NOOP,
             {}, false, true, 7)
     for i=1,inventoryRows do
         local horizContainer = lwui.buildHorizontalContainer(0, 0, 100, mCrewLineHeight, tabOneStandardVisibility, NOOP,
@@ -271,17 +289,17 @@ end
 local function constructEnhancementsLayout()
     local ib1 = lwui.buildInventoryButton(name, 300, 30, EQUIPMENT_ICON_SIZE + 2, EQUIPMENT_ICON_SIZE + 2, tabOneStandardVisibility,
     lwui.solidRectRenderFunction(Graphics.GL_Color(1, .5, 0, 1)), inventoryFilterFunctionEquipment, NOOP)--todo remove this testing element
-    ib1.addItem(mEquipmentGenerationTable[2]())--mNameToItemIndexTable["Seal Head"]]())--todo make a table of names to indexes.
+    ib1.addItem(mEquipmentGenerationTable[4]())--mNameToItemIndexTable["Seal Head"]]())--todo make a table of names to indexes.
 
     --Left hand side
     mCrewListContainer = buildCrewEquipmentScrollBar()
-    local crewListScrollWindow = lwui.buildVerticalScrollContainer(341, 139, 265, 400, tabOneStandardVisibility, mCrewListContainer, lwui.defaultScrollBarSkin)
+    local crewListScrollWindow = lwui.buildVerticalScrollContainer(341, mEquipmentTabTop, 265, 370, tabOneStandardVisibility, mCrewListContainer, lwui.defaultScrollBarSkin)
     lwui.addTopLevelObject(crewListScrollWindow)
     lwui.addTopLevelObject(ib1)
     
         --653, 334
         --Lower right corner
-    mDescriptionHeader = lwui.buildFixedTextBox(660, 343, 215, 40, tabOneStandardVisibility, 18)
+    mDescriptionHeader = lwui.buildFixedTextBox(660, 348, 215, 40, tabOneStandardVisibility, 18)
     mDescriptionHeader.text = NO_ITEM_SELECTED_TEXT
     lwui.addTopLevelObject(mDescriptionHeader)
     mDescriptionTextBox = lwui.buildDynamicHeightTextBox(0, 0, 215, 90, tabOneStandardVisibility, 10)
@@ -317,12 +335,26 @@ local function printCrewIds()
         end
     end
 end
+------------------------------------END GUI CREATION----------------------------------------------------------
+
+------------------------------------REALTIME EVENTS----------------------------------------------------------
+local function tickEquipment()
+    local ownshipManager = mGlobal:GetShipManager(0)
+    if not ownshipManager then return end
+    local playerCrew = lwl.getAllMemberCrew(ownshipManager)
+    for _,crewmem in ipairs(playerCrew) do
+        local equips = getCrewEquipment(crewmem)
+        print("ticking", crewmem:GetName(), "has ", #equips, "equipment")
+        for _,item in ipairs(equips) do
+            print("ticking", crewmem:GetName(), "'s", item.name)
+            item.onTick(item, crewmem)
+        end
+    end
+end
 
 if (script) then
-    script.on_render_event(Defines.RenderEvents.TABBED_WINDOW, function() 
-        --inMenu = true --todo why?
-    end, function(tabName)
-        --might need to put this in the reset category.
+    script.on_internal_event(Defines.InternalEvents.ON_TICK, function()
+        if not mGlobal:GetShipManager(0) then return end
         if not mSetupFinished then
             printCrewIds()
             --resetPersistedValues() --todo remove
@@ -332,6 +364,13 @@ if (script) then
             mCrewChangeObserver.saveLastSeenState()
             loadPersistedEquipment()
         end
+        tickEquipment()
+    end)
+    
+    script.on_render_event(Defines.RenderEvents.TABBED_WINDOW, function() 
+        --inMenu = true --todo why?
+    end, function(tabName)
+        --might need to put this in the reset category.
         --print("tab name "..tabName)
         if tabName == ENHANCEMENTS_TAB_NAME then
             --description rendering, last hovered item will persist until window refreshed.
@@ -394,7 +433,38 @@ if (script) then
         mTabbedWindow = tabName
     end)--todo persist after tab window closed, probably. not on jump.
 end
+------------------------------------END REALTIME EVENTS----------------------------------------------------------
 
+--todo dps to damage per fulltick converter
+--[[
+Ballanceator armor: As all things should be.  If crew is below half health, heal them for 1, otherwise, damage them
+--]]
+
+--maybe I want a onEquip/onUnequip methods?  Maybe I don't need onCreate and I can just do like if _ = nil create _.
+local function sealHead(item, crewmem)
+    --
+end
+
+local function Ballanceator(item, crewmem)
+    local dpt = .05
+    if (crewmem:GetIntegerHealth() > crewmem:GetMaxHealth() / 2) then
+        crewmem:DirectModifyHealth(-dpt)
+    else
+        crewmem:DirectModifyHealth(dpt)
+    end
+end
+------------------------------------ITEM DEFINITIONS----------------------------------------------------------
+--TODO need to make an array (enum) of these so I can get to them by index, the only thing I can store in a metavar.
+--todo this doesn't have access to the index of the thing properly, I should just make a thing that gets and incs itself.
+table.insert(mEquipmentGenerationTable, buildItemBuilder("Three-Way", TYPE_WEAPON, lwui.solidRectRenderFunction(Graphics.GL_Color(1, 1, .8, 1)), "Hit two more people at the cost of decreased damage.", NOOP, NOOP))
+table.insert(mEquipmentGenerationTable, buildItemBuilder("Seal Head", TYPE_ARMOR, lwui.solidRectRenderFunction(Graphics.GL_Color(1, .8, 1, 1)), "The headbutts it enables are an effective counter to the ridicule you might encounter for wearing such odd headgear.", NOOP, NOOP))
+table.insert(mEquipmentGenerationTable, buildItemBuilder("Gas Mask", TYPE_TOOL, lwui.solidRectRenderFunction(Graphics.GL_Color(.8, 1, 1, 1)), "Old construction, but still just as airtight as ever.  Confers immunity to shell gas.", NOOP, NOOP))
+table.insert(mEquipmentGenerationTable, buildItemBuilder("Ballancator", TYPE_ARMOR, lwui.solidRectRenderFunction(Graphics.GL_Color(.8, .8, 1, 1)), "As all things should be.  Strives to keep its wearer at exactly half health.", NOOP, Ballanceator))
+
+
+
+
+------------------------------------END ITEM DEFINITIONS----------------------------------------------------------
 --In the crew loop, each crew will check the items assigned to them and call their onTick functions, (pass themselves in?)
 --It is the job of the items to do everything wrt their functionality.
 
@@ -404,7 +474,12 @@ end
     --We do this on opening the tab if it's not set up, so that we make sure everything checks out.
 
 
-    --[[might revisit this if someone tells me what these methods do.
+    --[[
+    local netgear = lwui.buildItem("Netgear", TYPE_TOOL, EQUIPMENT_ICON_SIZE, EQUIPMENT_ICON_SIZE, tabOneStandardVisibility, lwui.solidRectRenderFunction(Graphics.GL_Color(.8, 1, 1, 1)),
+        "A small disk which when deployed releases entangling nets.  Also serves as a wireless access point. Cooldown: two minutes.  Deploy nets in a room to slow all movement through it for twenty five seconds by 60%.  Single use for some reason.", NOOP, NOOP)
+    Deeply fucked, requires me to have an active button for tools.  That sounds awful.  Actually it sounds not that bad, I'll circle back to this after I have some more items finished.
+    
+    might revisit this if someone tells me what these methods do.
     local anim = crewmem.crewAnim.anims[1] --TODO I guess we can cycle through these to be fancy but ok
     --render animation somewhere
     --decent chance this fucks up the crew animation, but I want to know what it does.
