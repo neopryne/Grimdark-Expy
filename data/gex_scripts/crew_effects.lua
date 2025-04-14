@@ -18,7 +18,7 @@ local function NOOP() end
 
 --A crew object will look something like this effect_crew = {crewmem=, bleed={}, effect2={}}
 local crewList = {}
-local mTickValue
+local scaledLocalTime = 0
 --A fun thing might look at how many effects are on a given crew.  It should be easy to get the list of effects on a given crew.  PRetty sure it is as written.
 
 --Strongly recommend that if you're creating effects with this, add them to this library instead of your mod if they don't have too many dependencies.
@@ -52,6 +52,10 @@ end
 --todo scale to real time, ie convert to 30ticks/second rather than frames.
 if (script) then
     script.on_internal_event(Defines.InternalEvents.ON_TICK, function()
-        tickEffects()
+        scaledLocalTime = scaledLocalTime + (Hyperspace.FPS.SpeedFactor * 16)
+        if (scaledLocalTime > 1) then
+            tickEffects()
+            scaledLocalTime = 0
+        end
     end)
 end

@@ -11,14 +11,12 @@ local lwsil = mods.lightweight_self_indexing_list
 Upon starting a new run, delete all inventory.
 
 
-However, the crew list is a different story.  I need to make sure that the people who are there are supposed to be there.  Recovering items upon crew loss is probably impossible.
+Recovering items upon crew loss is probably impossible.
 If a crew dies to damage without clonebay, we should be able to save the items though.
 TODO give different crew types different equipment slots.  Uniques and humans get all of them.  Likely elites as well.
 
 --Also note that due to how I've constructed this, items may stick around after the crew using them has died, so I need to make sure the calls don't error.
 --]]
-
---class needed for item storage, move this to lwl once things work.
 
 ----------------------------------------------------LIBRARY FUNCTIONS END----------------------
 local function NOOP() end
@@ -57,14 +55,16 @@ local mCrewLinePadding = 20
 local mCrewRowPadding = 10
 local mCrewLineNameWidth = 90
 local mCrewLineTextSize = 11
-local mEquipmentTabTop = 169
+local mTabTop = 139
+local mEquipmentTabTop = mTabTop + EQUIPMENT_ICON_SIZE
 
 local mDescriptionHeader
 local mDescriptionTextBox
 local mInventoryButtons = {}
+local scaledLocalTime = 0
 
 local inventoryRows = 5
-local inventoryColumns = 5
+local inventoryColumns = 6
 local persistEquipment
 
 --local mPage = 1--used to calculate which crew are displayed in the equipment loadout slots.  basically mPage % slots per page. Or do the scrolly thing, it's easier than I thought.
@@ -162,17 +162,17 @@ end
 local function getCrewEquipment(crewmem)
     local equipment = {}
     if not mCrewListContainer then
-        print("equipment not set up yet")
+        --print("equipment not set up yet")
         return {}
     end
     for _, crewContainer in ipairs(mCrewListContainer.objects) do
-        print("checking row ", crewContainer[GEX_CREW_ID])
-        if (crewContainer[GEX_CREW_ID] == crewmem.extend.crewId) then
-            print("crew found")
+        --print("checking row ", crewContainer[GEX_CREW_ID], "against ", crewmem.extend.selfId)
+        if (crewContainer[GEX_CREW_ID] == crewmem.extend.selfId) then
+            --print("crew found")
             for _, iButton in ipairs(crewContainer.objects) do
-                print("checking ", iButton.className)
+                --print("checking ", iButton.className)
                 if (iButton.className == "inventoryButton") then
-                    print("item ", iButton.item)
+                    --print("item ", iButton.item)
                     if (iButton.item ~= nil) then
                         table.insert(equipment, iButton.item)
                     end
@@ -240,7 +240,7 @@ local function buildInventoryContainer()
         for j=1,inventoryColumns do
             local buttonNum = ((i - 1) * inventoryRows) + j
             local button = lwui.buildInventoryButton(WEAPON_BUTTON_SUFFIX..buttonNum, 0, 0, mCrewLineHeight, mCrewLineHeight,
-                    tabOneStandardVisibility, lwui.solidRectRenderFunction(Graphics.GL_Color(1, .5, 0, 1)),
+                    tabOneStandardVisibility, lwui.inventoryButtonDefault,
                     inventoryFilterFunctionEquipment, buttonAddInventory)
             horizContainer.addObject(button)
             table.insert(mInventoryButtons, button)
@@ -255,11 +255,11 @@ local function buildCrewRow(crewmem)
     local nameText = lwui.buildFixedTextBox(0, 0, mCrewLineNameWidth, mCrewLineHeight, tabOneStandardVisibility, mCrewLineTextSize)
     nameText.text = crewmem:GetName()
     local weaponButton = lwui.buildInventoryButton(crewmem.extend.selfId..WEAPON_BUTTON_SUFFIX, 0, 0, mCrewLineHeight, mCrewLineHeight,
-        tabOneStandardVisibility, lwui.solidRectRenderFunction(Graphics.GL_Color(1, .5, 0, 1)), inventoryFilterFunctionWeapon, buttonAddCrewmem)
+        tabOneStandardVisibility, lwui.inventoryButtonDefault, inventoryFilterFunctionWeapon, buttonAddCrewmem)
     local armorButton = lwui.buildInventoryButton(crewmem.extend.selfId..ARMOR_BUTTON_SUFFIX, 0, 0, mCrewLineHeight, mCrewLineHeight,
-        tabOneStandardVisibility, lwui.solidRectRenderFunction(Graphics.GL_Color(1, .5, 0, 1)), inventoryFilterFunctionArmor, buttonAddCrewmem)
+        tabOneStandardVisibility, lwui.inventoryButtonDefault, inventoryFilterFunctionArmor, buttonAddCrewmem)
     local toolButton = lwui.buildInventoryButton(crewmem.extend.selfId..TOOL_BUTTON_SUFFIX, 0, 0, mCrewLineHeight, mCrewLineHeight,
-        tabOneStandardVisibility, lwui.solidRectRenderFunction(Graphics.GL_Color(1, .5, 0, 1)), inventoryFilterFunctionTool, buttonAddCrewmem)
+        tabOneStandardVisibility, lwui.inventoryButtonDefault, inventoryFilterFunctionTool, buttonAddCrewmem)
     local horizContainer = lwui.buildHorizontalContainer(3, 0, 100, mCrewLineHeight, tabOneStandardVisibility, NOOP,
         {nameText, weaponButton, armorButton, toolButton}, true, false, mCrewLinePadding)
     --kind of dirty to apply it to all of these but it's not that bad.
@@ -278,9 +278,10 @@ local function buildCrewEquipmentScrollBar()
     
     local verticalContainer = lwui.buildVerticalContainer(0, 0, 300, 20, tabOneStandardVisibility, NOOP,
         {nameText, weaponButton, armorButton, toolButton}, false, true, mCrewRowPadding)
-    
-    for i=1,#playerCrew do
-        verticalContainer.addObject(buildCrewRow(playerCrew[i]))
+    for j=1,4 do
+        for i=1,#playerCrew do
+            verticalContainer.addObject(buildCrewRow(playerCrew[i]))
+        end
     end
     
     return verticalContainer
@@ -289,13 +290,16 @@ end
 local function constructEnhancementsLayout()
     local ib1 = lwui.buildInventoryButton(name, 300, 30, EQUIPMENT_ICON_SIZE + 2, EQUIPMENT_ICON_SIZE + 2, tabOneStandardVisibility,
     lwui.solidRectRenderFunction(Graphics.GL_Color(1, .5, 0, 1)), inventoryFilterFunctionEquipment, NOOP)--todo remove this testing element
-    ib1.addItem(mEquipmentGenerationTable[4]())--mNameToItemIndexTable["Seal Head"]]())--todo make a table of names to indexes.
+    ib1.addItem(mEquipmentGenerationTable[4]())--mNameToItemIndexTable["Seal Head"]]())--todo make a table of names to indexes.  or maybe just randomly pick one every time.
 
     --Left hand side
     mCrewListContainer = buildCrewEquipmentScrollBar()
     local crewListScrollWindow = lwui.buildVerticalScrollContainer(341, mEquipmentTabTop, 265, 370, tabOneStandardVisibility, mCrewListContainer, lwui.defaultScrollBarSkin)
     lwui.addTopLevelObject(crewListScrollWindow)
     lwui.addTopLevelObject(ib1)
+    local nameHeader = lwui.buildFixedTextBox(340, mTabTop, 260, 26, tabOneStandardVisibility, 16)
+    nameHeader.text = "   Name          Weapon   Armor   Item"
+    lwui.addTopLevelObject(nameHeader)
     
         --653, 334
         --Lower right corner
@@ -311,6 +315,9 @@ local function constructEnhancementsLayout()
     --Upper right corner
     --It's a bunch of inventory buttons, representing how many slots you have to hold this stuff you don't have equipped currently.
     --When things get added to the inventory, they'll find the first empty slot here.   So I need to group these buttons in a list somewhere.
+    local inventoryHeader = lwui.buildFixedTextBox(622, mTabTop, 225, 26, tabOneStandardVisibility, 14)
+    inventoryHeader.text = "Inventory"
+    lwui.addTopLevelObject(inventoryHeader)
     lwui.addTopLevelObject(buildInventoryContainer())
     print("stuff readied")
 end
@@ -344,9 +351,9 @@ local function tickEquipment()
     local playerCrew = lwl.getAllMemberCrew(ownshipManager)
     for _,crewmem in ipairs(playerCrew) do
         local equips = getCrewEquipment(crewmem)
-        print("ticking", crewmem:GetName(), "has ", #equips, "equipment")
+        --print("ticking", crewmem:GetName(), "has ", #equips, "equipment")
         for _,item in ipairs(equips) do
-            print("ticking", crewmem:GetName(), "'s", item.name)
+            --print("ticking", crewmem:GetName(), "'s", item.name)
             item.onTick(item, crewmem)
         end
     end
@@ -364,7 +371,15 @@ if (script) then
             mCrewChangeObserver.saveLastSeenState()
             loadPersistedEquipment()
         end
-        tickEquipment()
+            --[[ formula to turn ticks into 1/32 second
+            16 / speedFactor = ticks per second
+            tps * functor = 32
+            --]]
+        scaledLocalTime = scaledLocalTime + (Hyperspace.FPS.SpeedFactor * 16)
+        if (scaledLocalTime > 1) then
+            tickEquipment()
+            scaledLocalTime = 0
+        end
     end)
     
     script.on_render_event(Defines.RenderEvents.TABBED_WINDOW, function() 
@@ -446,7 +461,7 @@ local function sealHead(item, crewmem)
 end
 
 local function Ballanceator(item, crewmem)
-    local dpt = .05
+    local dpt = .085
     if (crewmem:GetIntegerHealth() > crewmem:GetMaxHealth() / 2) then
         crewmem:DirectModifyHealth(-dpt)
     else
@@ -459,7 +474,7 @@ end
 table.insert(mEquipmentGenerationTable, buildItemBuilder("Three-Way", TYPE_WEAPON, lwui.solidRectRenderFunction(Graphics.GL_Color(1, 1, .8, 1)), "Hit two more people at the cost of decreased damage.", NOOP, NOOP))
 table.insert(mEquipmentGenerationTable, buildItemBuilder("Seal Head", TYPE_ARMOR, lwui.solidRectRenderFunction(Graphics.GL_Color(1, .8, 1, 1)), "The headbutts it enables are an effective counter to the ridicule you might encounter for wearing such odd headgear.", NOOP, NOOP))
 table.insert(mEquipmentGenerationTable, buildItemBuilder("Gas Mask", TYPE_TOOL, lwui.solidRectRenderFunction(Graphics.GL_Color(.8, 1, 1, 1)), "Old construction, but still just as airtight as ever.  Confers immunity to shell gas.", NOOP, NOOP))
-table.insert(mEquipmentGenerationTable, buildItemBuilder("Ballancator", TYPE_ARMOR, lwui.solidRectRenderFunction(Graphics.GL_Color(.8, .8, 1, 1)), "As all things should be.  Strives to keep its wearer at exactly half health.", NOOP, Ballanceator))
+table.insert(mEquipmentGenerationTable, buildItemBuilder("Ballancator", TYPE_ARMOR, lwui.solidRectRenderFunction(Graphics.GL_Color(.8, .8, 1, 1)), "As all things should be.  Strives to keeAs all things should be.  Strives to keeAs all things should be.  Strives to keeAs all things should be.  Strives to keeAs all things should be.  Strives to keeAs all things should be.  Strives to keeAs all things should be.  Strives to keeAs all things should be.  Strives to keeAs all things should be.  Strives to keeAs all things should be.  Strives to keeAs all things should be.  Strives to keeAs all things should be.  Strives to keeAs all things should be.  Strives to keeAs all things should be.  Strives to keep its wearer at exactly half health.", NOOP, Ballanceator))
 
 
 
@@ -467,7 +482,7 @@ table.insert(mEquipmentGenerationTable, buildItemBuilder("Ballancator", TYPE_ARM
 ------------------------------------END ITEM DEFINITIONS----------------------------------------------------------
 --In the crew loop, each crew will check the items assigned to them and call their onTick functions, (pass themselves in?)
 --It is the job of the items to do everything wrt their functionality.
-
+--"Cursed" items that can't be unequipped
 
         
     --Needing to rebuild these tables a lot is why we rely on the _persisted_ values as the source of truth for equipment status.
