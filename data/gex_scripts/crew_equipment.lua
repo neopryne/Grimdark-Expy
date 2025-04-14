@@ -278,19 +278,25 @@ local function buildCrewEquipmentScrollBar()
     
     local verticalContainer = lwui.buildVerticalContainer(0, 0, 300, 20, tabOneStandardVisibility, NOOP,
         {nameText, weaponButton, armorButton, toolButton}, false, true, mCrewRowPadding)
-    for j=1,4 do
-        for i=1,#playerCrew do
-            verticalContainer.addObject(buildCrewRow(playerCrew[i]))
-        end
+    for i=1,#playerCrew do
+        verticalContainer.addObject(buildCrewRow(playerCrew[i]))
     end
     
     return verticalContainer
 end
 
 local function constructEnhancementsLayout()
+    --[[
+    local t1 = lwui.buildDynamicHeightTextBox(0, 0, 120, 40, tabOneStandardVisibility, 12)
+    t1.text = "Ok so this is a pretty long text box that's probably going to overflow the bounds of the text that created it lorum donor kit mama, consecutur rivus alterna nunc provinciamus."
+    local c1 = lwui.buildContainer(700, 60, 60, 60, tabOneStandardVisibility, 
+        lwui.solidRectRenderFunction(Graphics.GL_Color(1, .5, 0, .3)), {t1}, false, false)
+    lwui.addTopLevelObject(c1)--]]
+    
+    
     local ib1 = lwui.buildInventoryButton(name, 300, 30, EQUIPMENT_ICON_SIZE + 2, EQUIPMENT_ICON_SIZE + 2, tabOneStandardVisibility,
     lwui.solidRectRenderFunction(Graphics.GL_Color(1, .5, 0, 1)), inventoryFilterFunctionEquipment, NOOP)--todo remove this testing element
-    ib1.addItem(mEquipmentGenerationTable[4]())--mNameToItemIndexTable["Seal Head"]]())--todo make a table of names to indexes.  or maybe just randomly pick one every time.
+    ib1.addItem(mEquipmentGenerationTable[2]())--mNameToItemIndexTable["Seal Head"]]())--todo make a table of names to indexes.  or maybe just randomly pick one every time.
 
     --Left hand side
     mCrewListContainer = buildCrewEquipmentScrollBar()
@@ -298,7 +304,7 @@ local function constructEnhancementsLayout()
     lwui.addTopLevelObject(crewListScrollWindow)
     lwui.addTopLevelObject(ib1)
     local nameHeader = lwui.buildFixedTextBox(340, mTabTop, 260, 26, tabOneStandardVisibility, 16)
-    nameHeader.text = "   Name          Weapon   Armor   Item"
+    nameHeader.text = "   Name          Weapon   Armor   Tool"
     lwui.addTopLevelObject(nameHeader)
     
         --653, 334
@@ -474,12 +480,44 @@ end
 table.insert(mEquipmentGenerationTable, buildItemBuilder("Three-Way", TYPE_WEAPON, lwui.solidRectRenderFunction(Graphics.GL_Color(1, 1, .8, 1)), "Hit two more people at the cost of decreased damage.", NOOP, NOOP))
 table.insert(mEquipmentGenerationTable, buildItemBuilder("Seal Head", TYPE_ARMOR, lwui.solidRectRenderFunction(Graphics.GL_Color(1, .8, 1, 1)), "The headbutts it enables are an effective counter to the ridicule you might encounter for wearing such odd headgear.", NOOP, NOOP))
 table.insert(mEquipmentGenerationTable, buildItemBuilder("Gas Mask", TYPE_TOOL, lwui.solidRectRenderFunction(Graphics.GL_Color(.8, 1, 1, 1)), "Old construction, but still just as airtight as ever.  Confers immunity to shell gas.", NOOP, NOOP))
-table.insert(mEquipmentGenerationTable, buildItemBuilder("Ballancator", TYPE_ARMOR, lwui.solidRectRenderFunction(Graphics.GL_Color(.8, .8, 1, 1)), "As all things should be.  Strives to keeAs all things should be.  Strives to keeAs all things should be.  Strives to keeAs all things should be.  Strives to keeAs all things should be.  Strives to keeAs all things should be.  Strives to keeAs all things should be.  Strives to keeAs all things should be.  Strives to keeAs all things should be.  Strives to keeAs all things should be.  Strives to keeAs all things should be.  Strives to keeAs all things should be.  Strives to keeAs all things should be.  Strives to keeAs all things should be.  Strives to keep its wearer at exactly half health.", NOOP, Ballanceator))
+table.insert(mEquipmentGenerationTable, buildItemBuilder("Ballancator", TYPE_ARMOR, lwui.solidRectRenderFunction(Graphics.GL_Color(.8, .8, 1, 1)), "As all things should be.  Strives to keep its wearer at exactly half health.", NOOP, Ballanceator))
 
 
 
 
 ------------------------------------END ITEM DEFINITIONS----------------------------------------------------------
+-----------------------------------------WAYS TO GET ITEMS---------------------------------------------------------------
+function gex_give_equipment(index)
+    local equip = mEquipmentGenerationTable[index]()
+    addToInventory(equip)
+    return equip
+end
+
+function gex_give_random_equip()
+    if #mEquipmentGenerationTable == 0 then return end
+    return gex_give_equipment(math.random(1, #mEquipmentGenerationTable))
+end
+
+--[[
+After winning a battle, a chance to give one item.  Scales with TopScore.sector.  
+--]]
+script.on_internal_event(Defines.InternalEvents.PRE_CREATE_CHOICEBOX, function(event)
+    local itemChance = 0
+    itemChance = itemChance + (event.stuff.scrap * .005)
+    itemChance = itemChance + (event.stuff.fuel * .007)
+    itemChance = itemChance + (event.stuff.drones * .012)
+    itemChance = itemChance + (event.stuff.missiles * .01)
+    itemChance = itemChance * mGlobal:GetScoreKeeper().currentScore.sector * .25
+    
+    if (math.random() < itemChance) then
+        local equip = gex_give_random_equip()
+        event.text.data = event.text.data.."\nYou find a "..equip.name.." mixed in with the scrap."
+    end
+    print("itemChancepre", itemChance)
+    print("itemChance", itemChance)
+end)
+
+
 --In the crew loop, each crew will check the items assigned to them and call their onTick functions, (pass themselves in?)
 --It is the job of the items to do everything wrt their functionality.
 --"Cursed" items that can't be unequipped
