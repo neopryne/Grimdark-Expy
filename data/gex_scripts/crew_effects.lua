@@ -17,7 +17,7 @@ local lwl = mods.lightweight_lua
 local function NOOP() end
 
 --A crew object will look something like this effect_crew = {crewmem=, bleed={}, effect2={}}
-local crewList = {}
+local crewList = {} --The fun thing is this has to be all the crew, both sides.
 local scaledLocalTime = 0
 --A fun thing might look at how many effects are on a given crew.  It should be easy to get the list of effects on a given crew.  PRetty sure it is as written.
 
@@ -26,7 +26,7 @@ function lwce.createCrewEffect(name, onTick, onRender)
     return {name, onTick, onRender}
 end
 
-
+------------------BLEED------------------
 local function tickBleed(effect_crew, bleed)
     effect_crew.crewmem:DirectModifyHealth(-.03)
     bleed.value = bleed.value - 1
@@ -34,7 +34,6 @@ local function tickBleed(effect_crew, bleed)
         effect_crew.bleed = nil
     end
 end
-
 lwce.bleed = lwce.createCrewEffect("bleed", tickBleed, NOOP)
 
 
@@ -52,10 +51,12 @@ end
 --todo scale to real time, ie convert to 30ticks/second rather than frames.
 if (script) then
     script.on_internal_event(Defines.InternalEvents.ON_TICK, function()
-        scaledLocalTime = scaledLocalTime + (Hyperspace.FPS.SpeedFactor * 16)
-        if (scaledLocalTime > 1) then
-            tickEffects()
-            scaledLocalTime = 0
+        if not lwl.isPaused() then
+            scaledLocalTime = scaledLocalTime + (Hyperspace.FPS.SpeedFactor * 16)
+            if (scaledLocalTime > 1) then
+                tickEffects()
+                scaledLocalTime = 0
+            end
         end
     end)
 end

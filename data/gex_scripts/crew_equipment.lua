@@ -132,9 +132,45 @@ end
 
 ------------------------------------ITEM STORAGE FUNCTIONS----------------------------------------------------------
 --returns true if the item was able to be added, and false if there was no room.  Called when loading persisted inventory items or when obtaining new ones.
+--todo I could make some buttons you can buy that don't get cleared upon starting a new run.  Final battle tension.
+--todo Gift of Equipment, one random item, starts unlocked.  Greater boon, two random items.
+local function resetPersistedValues()
+    Hyperspace.metaVariables[KEY_NUM_EQUIPS] = 0
+end
+
+local function clearIButton(iButton)
+    if iButton.item == nil then return end
+    iButton.item = nil
+end
+
+local function resetInventory()
+    resetPersistedValues()
+    --Clear persisted values, remove all items from crew and inventory.
+    for _, iButton in ipairs(mInventoryButtons) do
+        clearIButton(iButton)
+    end
+    
+    for _, crewContainer in ipairs(mCrewListContainer.objects) do
+        for _, iButton in ipairs(crewContainer.objects) do
+            if (iButton.className == "inventoryButton") then
+                clearIButton(iButton)
+            end
+        end
+    end
+end
+
 local function addToInventory(item)
+    local oldSlotValue = item.assigned_slot
     for _, iButton in ipairs(mInventoryButtons) do
         if (iButton.addItem(item)) then
+            if oldSlotValue ~= nil and oldSlotValue >= 0 then
+                local crewmem = lwl.getCrewById(oldSlotValue)
+                if crewmem then
+                    item.onRemove(item, crewmem)
+                else
+                    print("ERROR: Could not find crewmember with id ", oldSlotValue)
+                end
+            end
             return true
         end
     end
@@ -143,13 +179,15 @@ end
 
 local function addToCrew(item, crewId)
     for _, crewContainer in ipairs(mCrewListContainer.objects) do
-        print("checking row ", crewContainer[GEX_CREW_ID])
+        --print("checking row ", crewContainer[GEX_CREW_ID])
         if (crewContainer[GEX_CREW_ID] == crewId) then
-            print("crew found, adding ", item.name)
+            --print("crew found, adding ", item.name)
             for _, iButton in ipairs(crewContainer.objects) do
                 if (iButton.className == "inventoryButton") then
-                    print("trying to add item to ", iButton.className)
+                    --print("trying to add item to ", iButton.className)
                     if iButton.addItem(item) then
+                        local crewmem = lwl.getCrewById(crewId)
+                        item.onEquip(item, crewmem)
                         return true
                     end
                 end
@@ -185,7 +223,7 @@ end
 
 persistEquipment = function()
     local numEquipment = mItemList.length
-    print("persisting ", numEquipment, " items")
+    --print("persisting ", numEquipment, " items")
     local successes = 0
     for i=1,numEquipment do
         local equipment = mItemList:get(i)
@@ -193,28 +231,24 @@ persistEquipment = function()
             print("ERROR: could not persist item: incomplete values.")
         else
             successes = successes + 1
-            print("persisting ", equipment.name, " genIndx ", equipment.generating_index, " slot ", equipment.assigned_slot)
+            --print("persisting ", equipment.name, " genIndx ", equipment.generating_index, " slot ", equipment.assigned_slot)
             Hyperspace.metaVariables[KEY_EQUIPMENT_GENERATING_INDEX..successes] = equipment.generating_index --todo create this
             Hyperspace.metaVariables[KEY_EQUIPMENT_ASSIGNMENT..successes] = equipment.assigned_slot--todo I need to set this value properly
         end
     end
     Hyperspace.metaVariables[KEY_NUM_EQUIPS] = successes
-    print("persisted ", successes , " out of ", numEquipment)
-end
-
-local function resetPersistedValues()
-    Hyperspace.metaVariables[KEY_NUM_EQUIPS] = 0
+    --print("persisted ", successes , " out of ", numEquipment)
 end
 
 local function loadPersistedEquipment()
     local numEquipment = Hyperspace.metaVariables[KEY_NUM_EQUIPS]
-    print("loading ", numEquipment, " items")
+    --print("loading ", numEquipment, " items")
     for i=1,numEquipment do
         local generationTableIndex = Hyperspace.metaVariables[KEY_EQUIPMENT_GENERATING_INDEX..i]
-        print("index ", generationTableIndex)
+        --print("index ", generationTableIndex)
         local item = mEquipmentGenerationTable[generationTableIndex]()
         local position = Hyperspace.metaVariables[KEY_EQUIPMENT_ASSIGNMENT..i]
-        print("loading ", item.name, " genIndx ", item.generating_index, " slot ", item.assigned_slot)
+        --print("loading ", item.name, " genIndx ", item.generating_index, " slot ", item.assigned_slot)
         if position == -1 then
             if (addToInventory(item)) then
                 --mItemList:append(item)
@@ -225,7 +259,7 @@ local function loadPersistedEquipment()
                 print("ERROR: Failed to load item ", item.name)
             end
         end
-        print("loaded item ", item.name, position)
+        --print("loaded item ", item.name, position)
     end
 end
 ------------------------------------END ITEM STORAGE FUNCTIONS----------------------------------------------------------
@@ -274,7 +308,7 @@ local function buildCrewEquipmentScrollBar()
     local crewScrollBar
 
     local ownshipManager = mGlobal:GetShipManager(0)
-    local playerCrew = lwl.getAllMemberCrew(ownshipManager)
+    local playerCrew = lwl.getAllMemberCrew(ownshipManager, "crew")
     
     local verticalContainer = lwui.buildVerticalContainer(0, 0, 300, 20, tabOneStandardVisibility, NOOP,
         {nameText, weaponButton, armorButton, toolButton}, false, true, mCrewRowPadding)
@@ -309,7 +343,7 @@ local function constructEnhancementsLayout()
     
         --653, 334
         --Lower right corner
-    mDescriptionHeader = lwui.buildFixedTextBox(660, 348, 215, 40, tabOneStandardVisibility, 18)
+    mDescriptionHeader = lwui.buildFixedTextBox(660, 348, 215, 35, tabOneStandardVisibility, 18)--TODO AALL FIX
     mDescriptionHeader.text = NO_ITEM_SELECTED_TEXT
     lwui.addTopLevelObject(mDescriptionHeader)
     mDescriptionTextBox = lwui.buildDynamicHeightTextBox(0, 0, 215, 90, tabOneStandardVisibility, 10)
@@ -325,7 +359,7 @@ local function constructEnhancementsLayout()
     inventoryHeader.text = "Inventory"
     lwui.addTopLevelObject(inventoryHeader)
     lwui.addTopLevelObject(buildInventoryContainer())
-    print("stuff readied")
+    --print("stuff readied")
 end
 
 --[[
@@ -341,7 +375,7 @@ local function printCrewIds()
     local ownshipManager = mGlobal:GetShipManager(0)
     if (ownshipManager) then
         --update mCrewIds
-        local playerCrew = lwl.getAllMemberCrew(ownshipManager)
+        local playerCrew = lwl.getAllMemberCrew(ownshipManager, "crew")
         for i=1,#playerCrew do
             local crewmem = playerCrew[i]
             print(crewmem:GetName(), " has id ", crewmem.extend.selfId)
@@ -354,7 +388,7 @@ end
 local function tickEquipment()
     local ownshipManager = mGlobal:GetShipManager(0)
     if not ownshipManager then return end
-    local playerCrew = lwl.getAllMemberCrew(ownshipManager)
+    local playerCrew = lwl.getAllMemberCrew(ownshipManager, "crew")
     for _,crewmem in ipairs(playerCrew) do
         local equips = getCrewEquipment(crewmem)
         --print("ticking", crewmem:GetName(), "has ", #equips, "equipment")
@@ -368,10 +402,11 @@ end
 if (script) then
     script.on_internal_event(Defines.InternalEvents.ON_TICK, function()
         if not mGlobal:GetShipManager(0) then return end
+        if lwl.isPaused() then return end
         if not mSetupFinished then
             printCrewIds()
             --resetPersistedValues() --todo remove
-            print("Setting up items")
+            --print("Setting up items")
             mSetupFinished = true
             constructEnhancementsLayout()
             mCrewChangeObserver.saveLastSeenState()
@@ -414,17 +449,17 @@ if (script) then
                 local addedCrew = mCrewChangeObserver.getAddedCrew()
                 local removedCrew = mCrewChangeObserver.getRemovedCrew()
                 for _, crewmem in ipairs(removedCrew) do
-                    print("removing ", crewmem:GetName())
+                    --print("removing ", crewmem:GetName())
                     local removedLines = {}
                     --remove existing row
                     for _, crewContainer in ipairs(mCrewListContainer.objects) do
-                        print("checking row ", crewContainer[GEX_CREW_ID])
+                        --print("checking row ", crewContainer[GEX_CREW_ID])
                         if (crewContainer[GEX_CREW_ID] == crewmem.extend.selfId) then
-                            print("found match! ")
-                            print("there were N crew ", #mCrewListContainer.objects)
+                            --print("found match! ")
+                            --print("there were N crew ", #mCrewListContainer.objects)
                             table.insert(removedLines, crewContainer)
                             mCrewListContainer.objects = lwl.getNewElements(mCrewListContainer.objects, {crewContainer})--todo this is kind of experimental
-                            print("there are now N crew ", #mCrewListContainer.objects)
+                            --print("there are now N crew ", #mCrewListContainer.objects)
                         end
                     end
                     --remove all the items in removedLines
@@ -432,7 +467,7 @@ if (script) then
                         for _, button in ipairs(line.objects) do
                             if (button.item) then
                                 mItemList:remove(button.item._index)
-                                print("removed item ", button.item._index)
+                                --print("removed item ", button.item._index)
                             end
                         end
                     end
@@ -456,14 +491,66 @@ if (script) then
 end
 ------------------------------------END REALTIME EVENTS----------------------------------------------------------
 
---todo dps to damage per fulltick converter
+--Only the player can use items.
 --[[
 Ballanceator armor: As all things should be.  If crew is below half health, heal them for 1, otherwise, damage them
+Ability Refresh booster -- active to reset all other actives
+
 --]]
 
 --maybe I want a onEquip/onUnequip methods?  Maybe I don't need onCreate and I can just do like if _ = nil create _.
-local function sealHead(item, crewmem)
-    --
+local function ShredderCuffs(item, crewmem)
+    if crewmem.bFighting and crewmem.bSharedSpot then
+        local ownshipManager = mGlobal:GetShipManager(0)
+        local foeShipManager = mGlobal:GetShipManager(1)
+        foes_at_point = lwl.get_ship_crew_point(ownshipManager, foeShipManager, crewmem.x, crewmem.y)
+        for _,foe in ipairs(foes_at_point) do
+            foe:DirectModifyHealth(-.005)
+        end
+    end
+end
+
+local function SealHead(item, crewmem)
+    if item.stunCounter == nil then
+        item.stunCounter = 0
+    end
+    if crewmem.bFighting and crewmem.bSharedSpot then
+        item.stunCounter = item.stunCounter + .005
+        if (item.stunCounter > 1) then
+            item.stunCounter = 0
+            local ownshipManager = mGlobal:GetShipManager(0)
+            local foeShipManager = mGlobal:GetShipManager(1)
+            foes_at_point = lwl.get_ship_crew_point(ownshipManager, foeShipManager, crewmem.x, crewmem.y)
+            for _,foe in ipairs(foes_at_point) do
+                foe.fStunTime = foe.fStunTime + .3
+            end
+        end
+    end
+end
+
+--The crew watcher isn't working, I'm seeing times when crew leave and my list doesn't change.  This is likely due to the game being paused or something.
+--Or maybe I'm not querying it at the right time?  I'm never missing crew that were added.
+--equinoid tools scale off bp and have +3 mult when applied to horse.
+--this is why we need equip/un methods, abuse of things like this.  When a crew is removed from your ship, we need to call unequip on all of their items and (possibly) move them back to the inventory.  Maybe do this if the last tab was the crew tab?  There's no getting around this stuff for things that have state.
+local function ChicagoTypewriter(item, crewmem)
+    if (item.manningWeapons == nil) then item.manningWeapons = false end
+    local manningWeapons = crewmem.iManningId == lwl.SYS_WEAPONS()
+    --if manning weapons, set weapons to boostable.  If not, unset this value.
+    --todo this doesn't work, bBoostable was already true.  You could do interesting stuff with setting this to false for enemy systems, but it's a minor effect.  Honestly probably worth it.
+    if manningWeapons ~= item.manningWeapons then
+        if manningWeapons then
+            Hyperspace.ships.player.weaponSystem:UpgradeSystem(1)
+        else
+            Hyperspace.ships.player.weaponSystem:UpgradeSystem(-1)
+        end
+    end
+    item.manningWeapons = manningWeapons
+end
+
+local function ChicagoTypewriterUnequip(item, crewmem)
+    if item.manningWeapons then
+        Hyperspace.ships.player.weaponSystem:UpgradeSystem(-1)
+    end
 end
 
 local function Ballanceator(item, crewmem)
@@ -477,10 +564,10 @@ end
 ------------------------------------ITEM DEFINITIONS----------------------------------------------------------
 --TODO need to make an array (enum) of these so I can get to them by index, the only thing I can store in a metavar.
 --todo this doesn't have access to the index of the thing properly, I should just make a thing that gets and incs itself.
-table.insert(mEquipmentGenerationTable, buildItemBuilder("Three-Way", TYPE_WEAPON, lwui.solidRectRenderFunction(Graphics.GL_Color(1, 1, .8, 1)), "Hit two more people at the cost of decreased damage.", NOOP, NOOP))
-table.insert(mEquipmentGenerationTable, buildItemBuilder("Seal Head", TYPE_ARMOR, lwui.solidRectRenderFunction(Graphics.GL_Color(1, .8, 1, 1)), "The headbutts it enables are an effective counter to the ridicule you might encounter for wearing such odd headgear.", NOOP, NOOP))
-table.insert(mEquipmentGenerationTable, buildItemBuilder("Gas Mask", TYPE_TOOL, lwui.solidRectRenderFunction(Graphics.GL_Color(.8, 1, 1, 1)), "Old construction, but still just as airtight as ever.  Confers immunity to shell gas.", NOOP, NOOP))
-table.insert(mEquipmentGenerationTable, buildItemBuilder("Ballancator", TYPE_ARMOR, lwui.solidRectRenderFunction(Graphics.GL_Color(.8, .8, 1, 1)), "As all things should be.  Strives to keep its wearer at exactly half health.", NOOP, Ballanceator))
+table.insert(mEquipmentGenerationTable, buildItemBuilder("Shredder Cuffs", TYPE_WEAPON, lwui.solidRectRenderFunction(Graphics.GL_Color(1, 1, .8, 1)), "Looking sharp.  Extra damage in melee.", NOOP, NOOP, NOOP, NOOP))
+table.insert(mEquipmentGenerationTable, buildItemBuilder("Seal Head", TYPE_ARMOR, lwui.solidRectRenderFunction(Graphics.GL_Color(1, .8, 1, 1)), "The headbutts it enables are an effective counter to the ridicule you might encounter for wearing such odd headgear.", NOOP, SealHead, NOOP, NOOP))
+table.insert(mEquipmentGenerationTable, buildItemBuilder("Chicago Typewriter", TYPE_TOOL, lwui.solidRectRenderFunction(Graphics.GL_Color(.8, 1, 1, 1)), "Lots of oomph in these keystrokes.  Adds a bar when manning weapons.", NOOP, ChicagoTypewriter, NOOP, ChicagoTypewriterUnequip))
+table.insert(mEquipmentGenerationTable, buildItemBuilder("Ballancator", TYPE_ARMOR, lwui.solidRectRenderFunction(Graphics.GL_Color(.8, .8, 1, 1)), "As all things should be.  Strives to keep its wearer at exactly half health.", NOOP, Ballanceator, NOOP, NOOP))
 
 
 
@@ -511,11 +598,13 @@ script.on_internal_event(Defines.InternalEvents.PRE_CREATE_CHOICEBOX, function(e
     
     if (math.random() < itemChance) then
         local equip = gex_give_random_equip()
-        event.text.data = event.text.data.."\nYou find a "..equip.name.." mixed in with the scrap."
+        event.stuff.scrap = math.max(0, event.stuff.scrap - 5)
+        event.text.data = event.text.data.."\nUpon closer inspection, some of the scrap is actually a "..equip.name.."!"
     end
-    print("itemChancepre", itemChance)
+    --print("itemChancepre", itemChance)
     print("itemChance", itemChance)
 end)
+script.on_game_event("START_BEACON_REAL", false, resetInventory)
 
 
 --In the crew loop, each crew will check the items assigned to them and call their onTick functions, (pass themselves in?)
