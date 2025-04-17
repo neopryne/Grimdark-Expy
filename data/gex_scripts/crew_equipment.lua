@@ -22,9 +22,9 @@ TODO give different crew types different equipment slots.  Uniques and humans ge
 local function NOOP() end
 local ENHANCEMENTS_TAB_NAME = "crew_enhancements"
 local EQUIPMENT_SUBTAB_INDEX = 1
-local TYPE_WEAPON = "type_weapon"
-local TYPE_ARMOR = "type_armor"
-local TYPE_TOOL = "type_tool"
+local TYPE_WEAPON = "Weapon"
+local TYPE_ARMOR = "Armor"
+local TYPE_TOOL = "Tool"
 local EQUIPMENT_ICON_SIZE = 30 --todo adjust as is good
 local GEX_CREW_ID = "GEX_crewId"
 --todo a button that makes items for testing
@@ -78,11 +78,11 @@ end
 local tabOneStandardVisibility = generateStandardVisibilityFunction(ENHANCEMENTS_TAB_NAME, EQUIPMENT_SUBTAB_INDEX)
 
 --todo maybe helper functions to build items?  idk im not happy with this yet.
-local function buildItemBuilder(name, itemType, renderFunction, description, onCreate, onTick)
+local function buildItemBuilder(name, itemType, renderFunction, description, onCreate, onTick, onEquip, onRemove)
     local generating_index = #mEquipmentGenerationTable + 1
     return function()
         local builtItem = lwui.buildItem(name, itemType, EQUIPMENT_ICON_SIZE, EQUIPMENT_ICON_SIZE,
-                tabOneStandardVisibility, renderFunction, description, onCreate, onTick)
+                tabOneStandardVisibility, renderFunction, description, onCreate, onTick, onEquip, onRemove)
         builtItem.generating_index = generating_index
         mNameToItemIndexTable[name] = generating_index
         print("built item from index ", generating_index)
@@ -112,12 +112,6 @@ end
 local function inventoryFilterFunctionEquipment(item)
     return inventoryFilterFunctionWeapon(item) or 
             inventoryFilterFunctionArmor(item) or inventoryFilterFunctionTool(item)
-end
-
-local function buttonAddInventory(button, item)
-    --todo set the something to -1 I guess
-    item.assigned_slot = -1
-    persistEquipment()
 end
 
 local function buttonAddCrewmem(button, item)
@@ -162,19 +156,26 @@ end
 local function addToInventory(item)
     local oldSlotValue = item.assigned_slot
     for _, iButton in ipairs(mInventoryButtons) do
-        if (iButton.addItem(item)) then
-            if oldSlotValue ~= nil and oldSlotValue >= 0 then
-                local crewmem = lwl.getCrewById(oldSlotValue)
-                if crewmem then
-                    item.onRemove(item, crewmem)
-                else
-                    print("ERROR: Could not find crewmember with id ", oldSlotValue)
-                end
-            end
+        if (iButton.addItem(item)) then --implicitly calls buttonAddInventory
             return true
         end
     end
     return false
+end
+
+--TODO This is not properly removing the items from the buttons they start from.  That's very bad.
+local function buttonAddInventory(button, item)
+    if item.assigned_slot ~= nil and item.assigned_slot >= 0 then
+        print("added from crew ", item.assigned_slot)
+        local crewmem = lwl.getCrewById(item.assigned_slot)
+        if crewmem then
+            item.onRemove(item, crewmem)
+        else
+            print("ERROR: Could not find crewmember with id ", item.assigned_slot)
+        end
+    end
+    item.assigned_slot = -1
+    persistEquipment()
 end
 
 local function addToCrew(item, crewId)
@@ -250,11 +251,8 @@ local function loadPersistedEquipment()
         local position = Hyperspace.metaVariables[KEY_EQUIPMENT_ASSIGNMENT..i]
         --print("loading ", item.name, " genIndx ", item.generating_index, " slot ", item.assigned_slot)
         if position == -1 then
-            if (addToInventory(item)) then
-                --mItemList:append(item)
-            end
+            addToInventory(item)
         else
-            --mItemList:append(item)
             if not addToCrew(item, position) then
                 print("ERROR: Failed to load item ", item.name)
             end
@@ -348,8 +346,6 @@ local function constructEnhancementsLayout()
     lwui.addTopLevelObject(mDescriptionHeader)
     mDescriptionTextBox = lwui.buildDynamicHeightTextBox(0, 0, 215, 90, tabOneStandardVisibility, 10)
     local descriptionTextScrollWindow = lwui.buildVerticalScrollContainer(643, 384, 260, 150, tabOneStandardVisibility, mDescriptionTextBox, lwui.testScrollBarSkin)
-    local longString = "Ok so this is a pretty long text box that's probably going to overflow the bounds of the text that created it lorum donor kit mama, consecutur rivus alterna nunc provinciamus."
-    mDescriptionTextBox.text = longString
     lwui.addTopLevelObject(descriptionTextScrollWindow)
 
     --Upper right corner
@@ -421,10 +417,52 @@ if (script) then
             tickEquipment()
             scaledLocalTime = 0
         end
+        
+        --Update crew table
+        local addedCrew = mCrewChangeObserver.getAddedCrew()
+        local removedCrew = mCrewChangeObserver.getRemovedCrew()
+        for _, crewmem in ipairs(removedCrew) do
+            print("removing ", crewmem:GetName())
+            local removedLines = {}
+            --remove existing row
+            for _, crewContainer in ipairs(mCrewListContainer.objects) do
+                --print("checking row ", crewContainer[GEX_CREW_ID])
+                if (crewContainer[GEX_CREW_ID] == crewmem.extend.selfId) then
+                    --print("found match! ")
+                    --print("there were N crew ", #mCrewListContainer.objects)
+                    table.insert(removedLines, crewContainer)
+                    mCrewListContainer.objects = lwl.getNewElements(mCrewListContainer.objects, {crewContainer})--todo this is kind of experimental
+                    --print("there are now N crew ", #mCrewListContainer.objects)
+                end
+            end
+            --remove all the items in removedLines
+            for _, line in ipairs(removedLines) do
+                for _, button in ipairs(line.objects) do
+                    if (button.item) then
+                        if (math.random() > .7) then --maybe you saved it?
+                            addToInventory(button.item)
+                        else
+                            mItemList:remove(button.item._index)
+                            button.item.onRemove(button.item) --todo could be a source of errors, or maybe I just always have to check for crewmem to be nil here.
+                        --print("removed item ", button.item._index)
+                        end
+                    end
+                end
+            end
+        end
+        for _, crewmem in ipairs(addedCrew) do
+            print("adding ", crewmem:GetName())
+            mCrewListContainer.addObject(buildCrewRow(crewmem))
+        end
+        
+        if (#addedCrew > 0 or #removedCrew > 0) then
+            print("num crew changed since last update ", addedCrew, removedCrew)
+            persistEquipment()
+        end
+        mCrewChangeObserver.saveLastSeenState()
     end)
     
-    script.on_render_event(Defines.RenderEvents.TABBED_WINDOW, function() 
-        --inMenu = true --todo why?
+    script.on_render_event(Defines.RenderEvents.TABBED_WINDOW, function()
     end, function(tabName)
         --might need to put this in the reset category.
         --print("tab name "..tabName)
@@ -439,55 +477,16 @@ if (script) then
             end
             if (buttonContents) then
                 mDescriptionHeader.text = buttonContents.name
-                mDescriptionTextBox.text = buttonContents.description
+                mDescriptionTextBox.text = "Type: "..buttonContents.itemType.."\n"..buttonContents.description
             end
             
             if not (mTabbedWindow == ENHANCEMENTS_TAB_NAME) then
                 mDescriptionHeader.text = NO_ITEM_SELECTED_TEXT
                 mDescriptionTextBox.text = ""
-                --rebuild based on missing/added crew
-                local addedCrew = mCrewChangeObserver.getAddedCrew()
-                local removedCrew = mCrewChangeObserver.getRemovedCrew()
-                for _, crewmem in ipairs(removedCrew) do
-                    --print("removing ", crewmem:GetName())
-                    local removedLines = {}
-                    --remove existing row
-                    for _, crewContainer in ipairs(mCrewListContainer.objects) do
-                        --print("checking row ", crewContainer[GEX_CREW_ID])
-                        if (crewContainer[GEX_CREW_ID] == crewmem.extend.selfId) then
-                            --print("found match! ")
-                            --print("there were N crew ", #mCrewListContainer.objects)
-                            table.insert(removedLines, crewContainer)
-                            mCrewListContainer.objects = lwl.getNewElements(mCrewListContainer.objects, {crewContainer})--todo this is kind of experimental
-                            --print("there are now N crew ", #mCrewListContainer.objects)
-                        end
-                    end
-                    --remove all the items in removedLines
-                    for _, line in ipairs(removedLines) do
-                        for _, button in ipairs(line.objects) do
-                            if (button.item) then
-                                mItemList:remove(button.item._index)
-                                --print("removed item ", button.item._index)
-                            end
-                        end
-                    end
-                    --needs remove any equipped items from the mItemList, then re-persist data.
-                end
-                for i=1,#addedCrew do
-                    for _, crewmem in ipairs(addedCrew) do
-                        mCrewListContainer.addObject(buildCrewRow(crewmem))
-                    end
-                end
-                
-                if (#addedCrew > 0 or #removedCrew > 0) then
-                    print("num crew changed since last update")
-                    persistEquipment()
-                end
-                mCrewChangeObserver.saveLastSeenState()
             end
         end
         mTabbedWindow = tabName
-    end)--todo persist after tab window closed, probably. not on jump.
+    end)
 end
 ------------------------------------END REALTIME EVENTS----------------------------------------------------------
 
@@ -536,7 +535,7 @@ local function ChicagoTypewriter(item, crewmem)
     if (item.manningWeapons == nil) then item.manningWeapons = false end
     local manningWeapons = crewmem.iManningId == lwl.SYS_WEAPONS()
     --if manning weapons, set weapons to boostable.  If not, unset this value.
-    --todo this doesn't work, bBoostable was already true.  You could do interesting stuff with setting this to false for enemy systems, but it's a minor effect.  Honestly probably worth it.
+    --bBoostable was already true.  You could do interesting stuff with setting this to false for enemy systems as a minor effect.
     if manningWeapons ~= item.manningWeapons then
         if manningWeapons then
             Hyperspace.ships.player.weaponSystem:UpgradeSystem(1)
@@ -564,10 +563,10 @@ end
 ------------------------------------ITEM DEFINITIONS----------------------------------------------------------
 --TODO need to make an array (enum) of these so I can get to them by index, the only thing I can store in a metavar.
 --todo this doesn't have access to the index of the thing properly, I should just make a thing that gets and incs itself.
-table.insert(mEquipmentGenerationTable, buildItemBuilder("Shredder Cuffs", TYPE_WEAPON, lwui.solidRectRenderFunction(Graphics.GL_Color(1, 1, .8, 1)), "Looking sharp.  Extra damage in melee.", NOOP, NOOP, NOOP, NOOP))
-table.insert(mEquipmentGenerationTable, buildItemBuilder("Seal Head", TYPE_ARMOR, lwui.solidRectRenderFunction(Graphics.GL_Color(1, .8, 1, 1)), "The headbutts it enables are an effective counter to the ridicule you might encounter for wearing such odd headgear.", NOOP, SealHead, NOOP, NOOP))
-table.insert(mEquipmentGenerationTable, buildItemBuilder("Chicago Typewriter", TYPE_TOOL, lwui.solidRectRenderFunction(Graphics.GL_Color(.8, 1, 1, 1)), "Lots of oomph in these keystrokes.  Adds a bar when manning weapons.", NOOP, ChicagoTypewriter, NOOP, ChicagoTypewriterUnequip))
-table.insert(mEquipmentGenerationTable, buildItemBuilder("Ballancator", TYPE_ARMOR, lwui.solidRectRenderFunction(Graphics.GL_Color(.8, .8, 1, 1)), "As all things should be.  Strives to keep its wearer at exactly half health.", NOOP, Ballanceator, NOOP, NOOP))
+table.insert(mEquipmentGenerationTable, buildItemBuilder("Shredder Cuffs", TYPE_WEAPON, lwui.spriteRenderFunction("items/SpikedCuffs.png"), "Looking sharp.  Extra damage in melee.", NOOP, NOOP, NOOP, NOOP))
+table.insert(mEquipmentGenerationTable, buildItemBuilder("Seal Head", TYPE_ARMOR, lwui.spriteRenderFunction("items/SealHead.png"), "The headbutts it enables are an effective counter to the ridicule you might encounter for wearing such odd headgear.", NOOP, SealHead, NOOP, NOOP))
+table.insert(mEquipmentGenerationTable, buildItemBuilder("Chicago Typewriter", TYPE_TOOL, lwui.spriteRenderFunction("items/ChicagoTypewriter.png"), "Lots of oomph in these keystrokes.  Adds a bar when manning weapons.", NOOP, ChicagoTypewriter, NOOP, ChicagoTypewriterUnequip))
+table.insert(mEquipmentGenerationTable, buildItemBuilder("Ballancator", TYPE_ARMOR, lwui.spriteRenderFunction("items/Ballancator.png"), "As all things should be.  Strives to keep its wearer at exactly half health.", NOOP, Ballanceator, NOOP, NOOP))
 
 
 
@@ -602,7 +601,7 @@ script.on_internal_event(Defines.InternalEvents.PRE_CREATE_CHOICEBOX, function(e
         event.text.data = event.text.data.."\nUpon closer inspection, some of the scrap is actually a "..equip.name.."!"
     end
     --print("itemChancepre", itemChance)
-    print("itemChance", itemChance)
+    --print("itemChance", itemChance)
 end)
 script.on_game_event("START_BEACON_REAL", false, resetInventory)
 
