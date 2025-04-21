@@ -1,17 +1,11 @@
 @echo off
 setlocal
 
-REM Define the name of the zip file
-set "ZIP_NAME=Grimdark_Expy.zip"
-
 REM Define the list of files and folders to add to the zip (use full paths or relative paths)
 set FILES="data" "mod-appendix" "img"
 REM Define the relative path of the file to copy
 set "RELATIVE_FILE=Grimdark_Expy.zip"
-set "ABSOLUTE_PATH=C:\Program Files (x86)\Steam\steamapps\common\FTL Faster Than Light\mods\Grimdark_Expy.zip"
-
-REM Define the path to the shortcut file
-set "SHORTCUT_PATH=C:\Users\GunBuild-1\Documents\Workspace\Grimdark Expy\modman_orig.exe - Shortcut.lnk"
+set "ABSOLUTE_PATH=C:\Users\GunBuild-1\Documents\Workspace\ftlman-x86_64-pc-windows-gnu\ftlman\mods\%RELATIVE_FILE%"
 
 REM Create a temporary folder for zipping if necessary
 set TEMP_ZIP_DIR=%TEMP%\zip_temp
@@ -36,17 +30,11 @@ for %%F in (%FILES%) do (
 )
 
 REM Use PowerShell to create a zip file from the temporary folder
-powershell -command "Compress-Archive -Force -Path '%TEMP_ZIP_DIR%\*' -DestinationPath '%CD%\%ZIP_NAME%'"
+powershell -command "Compress-Archive -Force -Path '%TEMP_ZIP_DIR%\*' -DestinationPath '%CD%\%RELATIVE_FILE%'"
 
 REM Clean up temporary folder
 rd /s /q "%TEMP_ZIP_DIR%"
-
-echo Zip file created: %ZIP_NAME%
-
-
-
-
-
+echo Zip file created: %RELATIVE_FILE%
 
 REM Check if the source file exists
 if exist "%RELATIVE_FILE%" (
@@ -64,9 +52,5 @@ if exist "%RELATIVE_FILE%" (
     goto :EOF
 )
 
-if exist "%SHORTCUT_PATH%" (
-    echo Executing the shortcut target...
-    powershell -command "$WshShell = New-Object -ComObject WScript.Shell; $Shortcut = $WshShell.CreateShortcut('%SHORTCUT_PATH%'); Start-Process $Shortcut.TargetPath"
-) else (
-    echo Shortcut not found: %SHORTCUT_PATH%
-)
+powershell -NoProfile -Command "Set-Location C:\Users\GunBuild-1\Documents\Workspace\ftlman-x86_64-pc-windows-gnu\ftlman; .\ftlman.exe patch 'Multiverse 5.4.5 - Assets (Patch above Data).zip' 'Multiverse 5.4.6 - Data.zip' Vertex-Util.ftl 'Brightness Particles 1.4.1.zip' 'Lightweight Lua.zip' %RELATIVE_FILE%"
+powershell -command "& 'C:\Program Files (x86)\Steam\steamapps\common\FTL Faster Than Light\FTLGame.exe'"
