@@ -609,6 +609,18 @@ local function OmelasGeneratorUnequip(item, crewmem)
     local powerManager = Hyperspace.PowerManager.GetPowerManager(0)
     powerManager.currentPower.second = powerManager.currentPower.second + 4
 end
+-------------------Ferrogenic Exsanguinator------------------
+local function FerrogenicExsanguinator(item, crewmem)
+    --If crew repairing a system, apply bleed and repair system more.
+    if crewmem:RepairingSystem() then
+        local currentShipManager = global:GetShipManager(crewmem.currentShipId)
+        local systemId = crewmem.iManningId
+        local system = ShipManager:GetSystem(systemId)
+        system:PartialRepair(.05, false)
+        lwce.applyBleed(crewmem, 1.223)
+    end
+end
+
 --[[
 It seems like maybe applying effects just doesn't work on the enemy ship
 Yeah switching ships is super messed up it doesn't work for effects on either kind of crew.
@@ -634,13 +646,14 @@ Determination -- Getting hit charges your abilities.
 Inflatable muscles -- while about 1/3 health, extra damage
 Medbot Injector -- Health recharge passive
 Orgainc Impulse Grafts -- Armor: +5 hp, immunity to bleed, 60% stun resist.
+I guess I need status definitions so people know what they do.  Bleed is easy, the others less so.
 
 Interface Scrambler -- Removes manning bonus from all enemy systems and prevents them from being manned.
 Purple Thang -- censored, inflicts confusion.
 omalas dynamo: crew provides 4 bars of green power to your ship, but slowly stacks corruption until it kills them.  This is not removed upon cloning.
     Actually maybe I make it so if you die with corruption, you die for real.
 Holy Symbol: lots of icons, 90% corruption resist [miku, hand grenade, (), hl2 logo, random objects]
-Ferrogenic Exsanguinator:  "The machine god requires a sacrifice of blood, and I give it gladly."  Biomechanical tendrils wrap around this crew, extracting their life force to hasten repairs.
+Ferrogenic Exsanguinator:  
 --]]
 ------------------------------------ITEM DEFINITIONS----------------------------------------------------------
 --Only add to the bottom, changing the order is breaking.
@@ -653,7 +666,8 @@ table.insert(mEquipmentGenerationTable, buildItemBuilder("Peppy Bismol (DUD)", T
 table.insert(mEquipmentGenerationTable, buildItemBuilder("Medkit", TYPE_TOOL, lwui.spriteRenderFunction("items/medkit.png"), "Packed full of what whales you.  +15 max health.", NOOP, NOOP, MedkitEquip, MedkitRemove))
 table.insert(mEquipmentGenerationTable, buildItemBuilder("Orgainc Impulse Grafts", TYPE_ARMOR, lwui.spriteRenderFunction("items/graft_armor.png"), "Packed full of what whales you.  +15 max health.", NOOP, GraftArmor, GraftArmorEquip, GraftArmorRemove))
 table.insert(mEquipmentGenerationTable, buildItemBuilder("Testing Status Tool", TYPE_ARMOR, lwui.spriteRenderFunction("items/Untitled.png"), "ALL OF THEM!!!", NOOP, statusTest, statusTestEquip, statusTestRemove))
---table.insert(mEquipmentGenerationTable, buildItemBuilder("Omelas Generator", TYPE_ARMOR, lwui.spriteRenderFunction("items/Untitled.png"), "ALL OF THEM!!!", NOOP, OmelasGenerator, OmelasGeneratorEquip, OmelasGeneratorRemove))
+table.insert(mEquipmentGenerationTable, buildItemBuilder("Omelas Generator", TYPE_ARMOR, lwui.spriteRenderFunction("items/leaves_of_good_fortune.png"), "Power, at any cost.  Equiped crew adds four ship power but slowly stacks corruption.", NOOP, OmelasGenerator, OmelasGeneratorEquip, OmelasGeneratorRemove))
+table.insert(mEquipmentGenerationTable, buildItemBuilder("Ferrogenic Exsanguinator", TYPE_TOOL, lwui.spriteRenderFunction("items/vending_machine_1.png"), "'The machine god requires a sacrifice of blood, and I give it gladly.'  Biomechanical tendrils wrap around this crew, extracting their life force to hasten repairs.", NOOP, FerrogenicExsanguinator, NOOP, NOOP))
 
 ------------------------------------END ITEM DEFINITIONS----------------------------------------------------------
 -----------------------------------------WAYS TO GET ITEMS---------------------------------------------------------------
@@ -665,7 +679,7 @@ end
 
 function gex_give_random_item()
     if #mEquipmentGenerationTable == 0 then return end
-    return gex_give_equipment(math.random(1, #mEquipmentGenerationTable))
+    return gex_give_item(math.random(1, #mEquipmentGenerationTable))
 end
 
 --[[
