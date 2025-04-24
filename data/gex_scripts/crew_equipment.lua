@@ -380,13 +380,14 @@ local knownCrew = 0
 if (script) then
     script.on_internal_event(Defines.InternalEvents.ON_TICK, function()
         if not mGlobal:GetShipManager(0) then return end
+        if not mCrewChangeObserver.isInitialized() then print("lwce obby not init") return end
         if lwl.isPaused() then return end
         if not mSetupFinished then
             --resetPersistedValues() --todo remove
             --print("Setting up items")
             mSetupFinished = true
             constructEnhancementsLayout()
-            mCrewChangeObserver.saveLastSeenState()
+            mCrewChangeObserver.saveLastSeenState() --hey what?
             loadPersistedEquipment()
         end
             --[[ formula to turn ticks into 1/32 second
@@ -402,7 +403,8 @@ if (script) then
         --Update crew table
         local addedCrew = mCrewChangeObserver.getAddedCrew()
         local removedCrew = mCrewChangeObserver.getRemovedCrew()
-        for _, crewmem in ipairs(removedCrew) do
+        for _, crewId in ipairs(removedCrew) do
+            local crewmem = lwl.getCrewById(crewId)
             --print("removing ", crewmem:GetName())
             local removedLines = {}
             --remove existing row
@@ -410,10 +412,10 @@ if (script) then
                 --print("checking row ", crewContainer[GEX_CREW_ID])
                 if (crewContainer[GEX_CREW_ID] == crewmem.extend.selfId) then
                     --print("found match! ")
-                    --print("there were N crew ", #mCrewListContainer.objects)
+                    print("there were N crew ", #mCrewListContainer.objects)
                     table.insert(removedLines, crewContainer)
                     mCrewListContainer.objects = lwl.getNewElements(mCrewListContainer.objects, {crewContainer})--todo this is kind of experimental
-                    --print("there are now N crew ", #mCrewListContainer.objects)
+                    print("there are now N crew ", #mCrewListContainer.objects)
                 end
             end
             --remove all the items in removedLines
@@ -431,7 +433,8 @@ if (script) then
                 end
             end
         end
-        for _, crewmem in ipairs(addedCrew) do
+        for _, crewId in ipairs(addedCrew) do
+            local crewmem = lwl.getCrewById(crewId)
             --print("adding ", crewmem:GetName())
             mCrewListContainer.addObject(buildCrewRow(crewmem))
         end
