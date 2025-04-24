@@ -439,7 +439,7 @@ if (script) then
             mCrewListContainer.addObject(buildCrewRow(crewmem))
         end
         
-        print("EQUIPMENT: Compare ", #mCrewListContainer.objects, knownCrew, knownCrew == #mCrewListContainer.objects)
+        --print("EQUIPMENT: Compare ", #mCrewListContainer.objects, knownCrew, knownCrew == #mCrewListContainer.objects)
         if not (knownCrew == #mCrewListContainer.objects) then
             local crewString = ""
             for i=1,#mCrewListContainer.objects do
@@ -549,11 +549,10 @@ end
 -------------------HELLION HALBERD------------------
 local function HellionHalberd(item, crewmem)
     if crewmem.bFighting and crewmem.bSharedSpot then
-        local ownshipManager = mGlobal:GetShipManager(0)
-        local foeShipManager = mGlobal:GetShipManager(1)
-        foes_at_point = lwl.get_ship_crew_point(ownshipManager, foeShipManager, crewmem.x, crewmem.y)
-        for _,foe in ipairs(foes_at_point) do
-            lwce.applyBleed(foe, 10)--per tick  todo sometimes doesn't work.  also statuses sometimes don't teleport right.  Applying to enemy crew seems to not work now.
+        --foes_at_point = lwl.get_ship_crew_point(ownshipManager, foeShipManager, crewmem.x, crewmem.y) --coords are relative to the first manager.
+        --foes_at_point = lwl.getFoesAtPoint(crewmem, crewmem.x, crewmem.y) --this is actually harder to implement as it involves converting points in mainspace to one of the ships.
+        for _,foe in ipairs(lwl.getFoesAtSelf(crewmem)) do
+            lwce.applyBleed(foe, 2.1)--per tick  todo sometimes doesn't work.  also statuses sometimes don't teleport right.  Applying to enemy crew seems to not work now.
         end
     end
 end
@@ -641,6 +640,7 @@ Purple Thang -- censored, inflicts confusion.
 omalas dynamo: crew provides 4 bars of green power to your ship, but slowly stacks corruption until it kills them.  This is not removed upon cloning.
     Actually maybe I make it so if you die with corruption, you die for real.
 Holy Symbol: lots of icons, 90% corruption resist [miku, hand grenade, (), hl2 logo, random objects]
+Ferrogenic Exsanguinator:  "The machine god requires a sacrifice of blood, and I give it gladly."  Biomechanical tendrils wrap around this crew, extracting their life force to hasten repairs.
 --]]
 ------------------------------------ITEM DEFINITIONS----------------------------------------------------------
 --Only add to the bottom, changing the order is breaking.
@@ -649,7 +649,7 @@ table.insert(mEquipmentGenerationTable, buildItemBuilder("Seal Head", TYPE_ARMOR
 table.insert(mEquipmentGenerationTable, buildItemBuilder("Chicago Typewriter", TYPE_TOOL, lwui.spriteRenderFunction("items/ChicagoTypewriter.png"), "Lots of oomph in these keystrokes.  Adds a bar when manning weapons.", NOOP, ChicagoTypewriter, NOOP, ChicagoTypewriterUnequip))
 table.insert(mEquipmentGenerationTable, buildItemBuilder("Ballancator", TYPE_ARMOR, lwui.spriteRenderFunction("items/Ballancator.png"), "As all things should be.  Strives to keep its wearer at exactly half health.", NOOP, Ballanceator, NOOP, NOOP))
 table.insert(mEquipmentGenerationTable, buildItemBuilder("Hellion Halberd", TYPE_WEAPON, lwui.spriteRenderFunction("items/halberd.png"), "A vicious weapon that leaves its victems with gaping wounds that bleed profusely.", NOOP, HellionHalberd, NOOP, NOOP))
-table.insert(mEquipmentGenerationTable, buildItemBuilder("Peppy Bismol", TYPE_TOOL, lwui.spriteRenderFunction("items/peppy_bismol.png"), "'With Peppy Bismol, nothing will be able to keep you down!'  Increases active ability charge rate.", NOOP, PeppyBismol, NOOP, NOOP))
+table.insert(mEquipmentGenerationTable, buildItemBuilder("Peppy Bismol (DUD)", TYPE_TOOL, lwui.spriteRenderFunction("items/peppy_bismol.png"), "'With Peppy Bismol, nothing will be able to keep you down!'  Increases active ability charge rate.", NOOP, PeppyBismol, NOOP, NOOP))
 table.insert(mEquipmentGenerationTable, buildItemBuilder("Medkit", TYPE_TOOL, lwui.spriteRenderFunction("items/medkit.png"), "Packed full of what whales you.  +15 max health.", NOOP, NOOP, MedkitEquip, MedkitRemove))
 table.insert(mEquipmentGenerationTable, buildItemBuilder("Orgainc Impulse Grafts", TYPE_ARMOR, lwui.spriteRenderFunction("items/graft_armor.png"), "Packed full of what whales you.  +15 max health.", NOOP, GraftArmor, GraftArmorEquip, GraftArmorRemove))
 table.insert(mEquipmentGenerationTable, buildItemBuilder("Testing Status Tool", TYPE_ARMOR, lwui.spriteRenderFunction("items/Untitled.png"), "ALL OF THEM!!!", NOOP, statusTest, statusTestEquip, statusTestRemove))
