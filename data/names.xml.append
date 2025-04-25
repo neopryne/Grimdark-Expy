@@ -1,0 +1,13 @@
+<FTL>
+    <nameList race="human" sex="male">
+        <name>Swankerdino Rank S***</name> <!--A friend's character-->
+        <name>Swankerpino</name> <!--A friend's character-->
+        <name>Bing Chillin</name> <!--Its funny-->
+    </nameList> 
+
+    <nameList race="human" sex="female">
+        <name>Swankerdino Rank S***</name> <!--A friend's character-->
+        <name>Swankerpino</name> <!--A friend's character-->
+        <name>Bing Chillin</name> <!--Its funny-->
+    </nameList> 
+</FTL>

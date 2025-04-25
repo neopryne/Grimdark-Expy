@@ -14,7 +14,8 @@ Cognitives get wildcard slots.
 --Also note that due to how I've constructed this, items may stick around after the crew using them has died, so I need to make sure the calls don't error.
 --]]
 
-----------------------------------------------------LIBRARY FUNCTIONS END----------------------
+----------------------------------------------------DEFINES----------------------
+local TAG = "LW Crew Equips"
 local function NOOP() end
 local ENHANCEMENTS_TAB_NAME = "crew_enhancements"
 local EQUIPMENT_SUBTAB_INDEX = 1
@@ -161,7 +162,7 @@ local function iButtonAdd(button, item)
         if crewmem then
             item.onRemove(item, crewmem)
         else
-            print("ERROR: Could not find crewmember with id ", item.assigned_slot)
+            lwl.logError(TAG, "Could not find crewmember with id "..item.assigned_slot)
         end
     end
 end
@@ -196,6 +197,10 @@ local function buttonAddToCrew(button, item)
     iButtonAdd(button, item)
     local crewmem = lwl.getCrewById(button[GEX_CREW_ID])
     --print("added ", item.name, " to ", crewmem:GetName())
+    if (item.fromLoad) then --Do the unequip that should have happened when we quit the game.
+        item.fromLoad = nil
+        item.onRemove(item, crewmem)
+    end
     item.onEquip(item, crewmem)
     item.assigned_slot = button[GEX_CREW_ID]
     persistEquipment()
@@ -232,7 +237,7 @@ persistEquipment = function()
     for i=1,numEquipment do
         local equipment = mItemList:get(i)
         if (equipment.generating_index == nil) or (equipment.assigned_slot == nil) then
-            print("ERROR: could not persist ", equipment.name, ": incomplete values.")
+            lwl.logError(TAG, "Could not persist "..equipment.name..": incomplete values.")
         else
             successes = successes + 1
             --print("persisting ", equipment.name, " genIndx ", equipment.generating_index, " slot ", equipment.assigned_slot)
@@ -256,8 +261,9 @@ local function loadPersistedEquipment()
         if position == -1 then
             addToInventory(item)
         else
+            item.fromLoad = true
             if not addToCrew(item, position) then
-                print("ERROR: Failed to load item ", item.name, "attached to ", lwl.getCrewById(position):GetName())
+                lwl.logError(TAG, "Failed to load item "..item.name.." attached to "..lwl.getCrewById(position):GetName())
             end
         end
         --print("loaded item ", item.name, position)
@@ -309,7 +315,7 @@ end
 local function buildCrewEquipmentScrollBar()
     local crewScrollBar
 
-    local ownshipManager = mGlobal:GetShipManager(0)
+    local ownshipManager = Hyperspace.ships(0)
     local playerCrew = lwl.getAllMemberCrew(ownshipManager, "crew")
     
     local verticalContainer = lwui.buildVerticalContainer(0, 0, 300, 20, tabOneStandardVisibility, NOOP,
@@ -362,7 +368,7 @@ that's it, no fancy saving or loading stuff.
 
 ------------------------------------REALTIME EVENTS----------------------------------------------------------
 local function tickEquipment()
-    local ownshipManager = mGlobal:GetShipManager(0)
+    local ownshipManager = Hyperspace.ships(0)
     if not ownshipManager then return end
     local playerCrew = lwl.getAllMemberCrew(ownshipManager, "crew")
     for _,crewmem in ipairs(playerCrew) do
@@ -379,7 +385,7 @@ local knownCrew = 0
 
 if (script) then
     script.on_internal_event(Defines.InternalEvents.ON_TICK, function()
-        if not mGlobal:GetShipManager(0) then return end
+        if not Hyperspace.ships(0) then return end
         if not mCrewChangeObserver.isInitialized() then print("lwce obby not init") return end
         if lwl.isPaused() then return end
         if not mSetupFinished then
@@ -488,8 +494,8 @@ end
 -------------------SHREDDER CUFFS------------------
 local function ShredderCuffs(item, crewmem)
     if crewmem.bFighting and crewmem.bSharedSpot then
-        local ownshipManager = mGlobal:GetShipManager(0)
-        local foeShipManager = mGlobal:GetShipManager(1)
+        local ownshipManager = Hyperspace.ships(0)
+        local foeShipManager = Hyperspace.ships(1)
         foes_at_point = lwl.get_ship_crew_point(ownshipManager, foeShipManager, crewmem.x, crewmem.y)
         for _,foe in ipairs(foes_at_point) do
             foe:DirectModifyHealth(-.005)
@@ -505,8 +511,8 @@ local function SealHead(item, crewmem)
         item.stunCounter = item.stunCounter + .005
         if (item.stunCounter > 1) then
             item.stunCounter = 0
-            local ownshipManager = mGlobal:GetShipManager(0)
-            local foeShipManager = mGlobal:GetShipManager(1)
+            local ownshipManager = Hyperspace.ships(0)
+            local foeShipManager = Hyperspace.ships(1)
             foes_at_point = lwl.get_ship_crew_point(ownshipManager, foeShipManager, crewmem.x, crewmem.y)
             for _,foe in ipairs(foes_at_point) do
                 foe.fStunTime = foe.fStunTime + .3
@@ -587,16 +593,16 @@ local function statusTestEquip(item, crewmem)
     lwce.applyCorruption(crewmem, .2)
 end
 local function statusTest(item, crewmem)
-    --lwce.applyBleed(crewmem, 1)
+    lwce.applyBleed(crewmem, 1)
     lwce.applyConfusion(crewmem, 1)
     --lwce.applyCorruption(crewmem, .1)
 end
 local function statusTestRemove(item, crewmem)
     print("Removing corruption!")
-    lwce.applyCorruption(crewmem, -1)
+    lwce.applyCorruption(crewmem, -.2)
 end
 -------------------Omelas Generator------------------
-local function OmelasGeneratorEquip(item, crewmem)
+local function OmelasGeneratorEquip(item, crewmem) --mAYBE MAKE THIS CURSED.  Also this is broken and does not remove power properly, possibly upon exiting the game.  I should check the typewriter as well.  I need to call the onRemove methods of all items when quitting the game.  No such hook exists.
     local powerManager = Hyperspace.PowerManager.GetPowerManager(0)
     powerManager.currentPower.second = powerManager.currentPower.second + 4
 end
@@ -605,42 +611,25 @@ local function OmelasGenerator(item, crewmem)
     lwce.applyCorruption(crewmem, .0006)
 end
 
-local function OmelasGeneratorUnequip(item, crewmem)
+local function OmelasGeneratorRemove(item, crewmem)
     local powerManager = Hyperspace.PowerManager.GetPowerManager(0)
-    powerManager.currentPower.second = powerManager.currentPower.second + 4
+    powerManager.currentPower.second = powerManager.currentPower.second - 4
 end
 -------------------Ferrogenic Exsanguinator------------------
 local function FerrogenicExsanguinator(item, crewmem)
     --If crew repairing a system, apply bleed and repair system more.
     if crewmem:RepairingSystem() then
-        local currentShipManager = global:GetShipManager(crewmem.currentShipId)
+        local currentShipManager = Hyperspace.ships(crewmem.currentShipId)
         local systemId = crewmem.iManningId
-        local system = ShipManager:GetSystem(systemId)
-        system:PartialRepair(.05, false)
-        lwce.applyBleed(crewmem, 1.223)
+        local system = currentShipManager:GetSystem(systemId)
+        system:PartialRepair(.95, false)
+        lwce.applyBleed(crewmem, 3.2)
     end
 end
 
 --[[
-It seems like maybe applying effects just doesn't work on the enemy ship
-Yeah switching ships is super messed up it doesn't work for effects on either kind of crew.
-Sometimes this can't find your crew and I don't know why.
-If you leave the ship , you get removed from the crew observer. This is likely a bug in the crew change observer.
-Also it's not going there that messes things up, it's coming back?
-
-[Lua]: EQUIPMENT: There are now this many crew known about:     3    
-[Lua]: EFFECTS: There are now this many crew known about:     1    
-[Lua]: Failed to apply     confusion    : No such known crewmember     AJ Hager    
-[Lua]: EQUIPMENT: There are now this many crew known about:     3 
-Enemy came and teleported away now he's the only person effects knows about .
-
-
-[Lua]: EFFECTS: There are now this many crew known about:     5    
-[Lua]: EQUIPMENT: There are now this many crew known about:     3    
-[Lua]: EFFECTS: There are now this many crew known about:     1    
-[Lua]: EQUIPMENT: There are now this many crew known about:     2    
-[Lua]: EFFECTS: There are now this many crew known about:     2    
-[Lua]: EQUIPMENT: There are now this many crew known about:     3    
+todo persist status effects on crew
+Torpor Projector
 Noted, so teleporting really messes with this.  Furthermore why are the effects dipping to 1 while the equipment stays at 2?  
 Determination -- Getting hit charges your abilities.
 Inflatable muscles -- while about 1/3 health, extra damage
@@ -651,9 +640,23 @@ I guess I need status definitions so people know what they do.  Bleed is easy, t
 Interface Scrambler -- Removes manning bonus from all enemy systems and prevents them from being manned.
 Purple Thang -- censored, inflicts confusion.
 omalas dynamo: crew provides 4 bars of green power to your ship, but slowly stacks corruption until it kills them.  This is not removed upon cloning.
-    Actually maybe I make it so if you die with corruption, you die for real.
+    Actually maybe I make it so if you die with corruption, you die for real.  Or like, corruption% chance you don't revive.  5 corruption is already kind of a lot of damage.
 Holy Symbol: lots of icons, 90% corruption resist [miku, hand grenade, (), hl2 logo, random objects]
-Ferrogenic Exsanguinator:  
+Scrap Harm: Scrap gain increased by 10%, but gaining scrap makes crew bleed and go crazy. (automate)
+A fun thing might look at how many effects are on a given crew.  It should be easy to get the list of effects on a given crew.  PRetty sure it is as written.
+Compactifier -- armor, Equipped crew is noslot.
+  30% system resist to the room you're in
+Galpegar
+Noctus
+The Thunderskin  --Crew cannot fight and gains 100 (double?) health. When in a room with injured allies, bleeds profusely and heals them.  Needs statboost for the cannot fight probably.
+
+Sthenic Venom
+
+
+--Crew name list
+Swankerdino
+Swankerpino
+Bing Chillin
 --]]
 ------------------------------------ITEM DEFINITIONS----------------------------------------------------------
 --Only add to the bottom, changing the order is breaking.
