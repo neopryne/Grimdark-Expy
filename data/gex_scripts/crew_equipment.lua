@@ -667,7 +667,7 @@ table.insert(mEquipmentGenerationTable, buildItemBuilder("Ballancator", TYPE_ARM
 table.insert(mEquipmentGenerationTable, buildItemBuilder("Hellion Halberd", TYPE_WEAPON, lwui.spriteRenderFunction("items/halberd.png"), "A vicious weapon that leaves its victems with gaping wounds that bleed profusely.", NOOP, HellionHalberd, NOOP, NOOP))
 table.insert(mEquipmentGenerationTable, buildItemBuilder("Peppy Bismol (DUD)", TYPE_TOOL, lwui.spriteRenderFunction("items/peppy_bismol.png"), "'With Peppy Bismol, nothing will be able to keep you down!'  Increases active ability charge rate.", NOOP, PeppyBismol, NOOP, NOOP))
 table.insert(mEquipmentGenerationTable, buildItemBuilder("Medkit", TYPE_TOOL, lwui.spriteRenderFunction("items/medkit.png"), "Packed full of what whales you.  +15 max health.", NOOP, NOOP, MedkitEquip, MedkitRemove))
-table.insert(mEquipmentGenerationTable, buildItemBuilder("Orgainc Impulse Grafts", TYPE_ARMOR, lwui.spriteRenderFunction("items/graft_armor.png"), "Packed full of what whales you.  +15 max health.", NOOP, GraftArmor, GraftArmorEquip, GraftArmorRemove))
+table.insert(mEquipmentGenerationTable, buildItemBuilder("Orgainc Impulse Grafts", TYPE_ARMOR, lwui.spriteRenderFunction("items/graft_armor.png"), "Quickly rights abnormal status conditions. +5 max health, bleed immunity, stun resist.", NOOP, GraftArmor, GraftArmorEquip, GraftArmorRemove))
 table.insert(mEquipmentGenerationTable, buildItemBuilder("Testing Status Tool", TYPE_ARMOR, lwui.spriteRenderFunction("items/Untitled.png"), "ALL OF THEM!!!", NOOP, statusTest, statusTestEquip, statusTestRemove))
 table.insert(mEquipmentGenerationTable, buildItemBuilder("Omelas Generator", TYPE_ARMOR, lwui.spriteRenderFunction("items/leaves_of_good_fortune.png"), "Power, at any cost.  Equiped crew adds four ship power but slowly stacks corruption.", NOOP, OmelasGenerator, OmelasGeneratorEquip, OmelasGeneratorRemove))
 table.insert(mEquipmentGenerationTable, buildItemBuilder("Ferrogenic Exsanguinator", TYPE_TOOL, lwui.spriteRenderFunction("items/vending_machine_1.png"), "'The machine god requires a sacrifice of blood, and I give it gladly.'  Biomechanical tendrils wrap around this crew, extracting their life force to hasten repairs.", NOOP, FerrogenicExsanguinator, NOOP, NOOP))
@@ -678,6 +678,12 @@ function gex_give_item(index)
     local equip = mEquipmentGenerationTable[index]()
     addToInventory(equip)
     return equip
+end
+
+function gex_give_all_items()
+   for _,equip in ipairs(mEquipmentGenerationTable) do
+       addToInventory(equip)
+    end
 end
 
 function gex_give_random_item()
