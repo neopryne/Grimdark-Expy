@@ -2,10 +2,15 @@
   <title><![CDATA[ Grimdark Expy]]></title>
   <threadUrl><![CDATA[https://github.com/neopryne/Grimdark-Expy/tree/main]]></threadUrl>
   <author><![CDATA[ Limrix ]]></author>
-  <version><![CDATA[ 0.1 ]]></version>
+  <version><![CDATA[ 0.6 ]]></version>
   <description>
 <![CDATA[
 In the far reaches of the multiverse, sometimes you just want a really cool weapon.
+
+Requirements:
+	VertexUtils
+	Brightness Particles 1.4+
+	Lightweight Lua 0.7+
 ]]>
   </description>
 </metadata>

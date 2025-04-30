@@ -38,7 +38,7 @@ local KEY_EQUIPMENT_GENERATING_INDEX = "GEX_EQUIPMENT_GENERATING_INDEX_"
 local KEY_EQUIPMENT_ASSIGNMENT = "GEX_EQUIPMENT_ASSIGNMENT_"
 
 local mSetupFinished = false
-local mCrewChangeObserver = lwcco.createCrewChangeObserver("crew", 0)
+local mCrewChangeObserver = lwcco.createCrewChangeObserver("crew", 0, false)
 local mCrewListContainer
 local mEquipmentGenerationTable = {}
 local mNameToItemIndexTable = {}
@@ -61,6 +61,7 @@ local mDescriptionHeader
 local mDescriptionTextBox
 local mInventoryButtons = {}
 local scaledLocalTime = 0
+local mFrameCounter = 0
 
 local inventoryRows = 5
 local inventoryColumns = 6
@@ -149,7 +150,7 @@ local function resetInventory()
             end
         end
     end
-    mCrewListContainer.objects = {}
+    mCrewListContainer.objects = {} --todo this removes starting crew, find a better way to do whatever this is.
 end
 
 local function addToInventory(item)
@@ -415,14 +416,19 @@ local knownCrew = 0
 
 if (script) then
     script.on_internal_event(Defines.InternalEvents.ON_TICK, function()
-        if not Hyperspace.ships(0) then return end
-        if not mCrewChangeObserver.isInitialized() then print("lwce obby not init") return end
+        if not Hyperspace.ships(0) or Hyperspace.ships(0).iCustomizeMode == 2 then return end --in hangar
         if lwl.isPaused() then return end
+        if mFrameCounter < 30 then
+            mFrameCounter = mFrameCounter + 1
+            print(mFrameCounter)
+            return 
+        end
+        if not mCrewChangeObserver.isInitialized() then print("lwce obby not init") return end
         if not mSetupFinished then
             --resetPersistedValues() --todo remove
             --print("Setting up items")
             constructEnhancementsLayout()
-            mCrewChangeObserver.saveLastSeenState() --hey what?
+            mCrewChangeObserver.saveLastSeenState() --hey what? todo try removing
             loadPersistedEquipment()
             mSetupFinished = true
         end
@@ -479,10 +485,10 @@ if (script) then
         
         --print("EQUIPMENT: Compare ", #mCrewListContainer.objects, knownCrew, knownCrew == #mCrewListContainer.objects)
         if not (knownCrew == #mCrewListContainer.objects) then
-            local crewString = ""
+            --[[local crewString = ""
             for i=1,#mCrewListContainer.objects do
                 crewString = crewString..(lwl.getCrewById(mCrewListContainer.objects[i][GEX_CREW_ID]):GetName())
-            end
+            end--]]
             --print("EQUIPMENT: There are now this many crew known about: ", #mCrewListContainer.objects, crewString)
             knownCrew = #mCrewListContainer.objects
         end
@@ -496,6 +502,7 @@ if (script) then
     
     script.on_render_event(Defines.RenderEvents.TABBED_WINDOW, function()
     end, function(tabName)
+        if not mSetupFinished then return end
         --might need to put this in the reset category.
         --print("tab name "..tabName)
         if tabName == ENHANCEMENTS_TAB_NAME then
@@ -804,7 +811,11 @@ script.on_internal_event(Defines.InternalEvents.PRE_CREATE_CHOICEBOX, function(e
     --print("itemChance", itemChance)
 end)
 script.on_game_event("START_BEACON_REAL", false, function()
-        resetInventory()
+        if mSetupFinished then
+            resetInventory()
+        end
+        resetPersistedValues()
+        mFrameCounter = 33
         end)
 
 
