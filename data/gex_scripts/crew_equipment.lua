@@ -131,7 +131,7 @@ local function resetPersistedValues()
 end
 
 local function clearIButton(iButton)
-    if iButton.item == nil then return end
+    if iButton == nil then return end
     iButton.item = nil
 end
 
@@ -149,6 +149,7 @@ local function resetInventory()
             end
         end
     end
+    mCrewListContainer.objects = {}
 end
 
 local function addToInventory(item)
@@ -173,8 +174,9 @@ local function iButtonTryUnequipPrevious(button, item)
     end
 end
 
-local function trashItem(button, item)
+local function trashItem(button, item) --From scrap it came, and to scrap it can return.
     iButtonTryUnequipPrevious(button, item)
+    mItemList:remove(item._index)
     button.item = nil
     item.assigned_slot = -2 --destroyed
     Hyperspace.ships(0):ModifyScrapCount(item.sellValue, false)
@@ -282,7 +284,7 @@ local function loadPersistedEquipment()
         else
             item.fromLoad = true
             if not addToCrew(item, position) then
-                lwl.logError(TAG, "Failed to load item "..item.name.." attached to "..lwl.getCrewById(position):GetName())
+                lwl.logError(TAG, "Failed to load item "..item.name)
             end
         end
         --print("loaded item ", item.name, position)
@@ -313,7 +315,7 @@ end
 --todo toggle active buttons based on crew type.
 local function buildCrewRow(crewmem)
     local anim = lwui.buildObject(0, 0, mCrewLineHeight, mCrewLineHeight, tabOneStandardVisibility, lwui.solidRectRenderFunction(Graphics.GL_Color(.8, .2, .2, .3)))
-    local nameText = lwui.buildFixedTextBox(0, 0, mCrewLineNameWidth, mCrewLineHeight, tabOneStandardVisibility, mCrewLineTextSize)
+    local nameText = lwui.buildFixedTextBox(0, 0, mCrewLineNameWidth, mCrewLineHeight, tabOneStandardVisibility, NOOP, mCrewLineTextSize)
     nameText.text = crewmem:GetName()
     local weaponButton = lwui.buildInventoryButton(crewmem.extend.selfId..WEAPON_BUTTON_SUFFIX, 0, 0, mCrewLineHeight, mCrewLineHeight,
         tabOneStandardVisibility, lwui.inventoryButtonDefault, inventoryFilterFunctionWeapon, buttonAddToCrew)
@@ -354,23 +356,23 @@ local function constructEnhancementsLayout()
     local crewListScrollWindow = lwui.buildVerticalScrollContainer(341, mEquipmentTabTop, 290, 370, tabOneStandardVisibility, mCrewListContainer, lwui.defaultScrollBarSkin)
     lwui.addTopLevelObject(crewListScrollWindow, "TABBED_WINDOW")
     --lwui.addTopLevelObject(ib1)
-    local nameHeader = lwui.buildFixedTextBox(340, mTabTop, 260, 26, tabOneStandardVisibility, 16)
+    local nameHeader = lwui.buildFixedTextBox(340, mTabTop, 260, 26, tabOneStandardVisibility, NOOP, 16)
     nameHeader.text = "       Name             Weapon Armor Tool"
     lwui.addTopLevelObject(nameHeader, "TABBED_WINDOW")
     
         --653, 334
         --Lower right corner
-    mDescriptionHeader = lwui.buildFixedTextBox(645, 348, 225, 35, tabOneStandardVisibility, 18)--TODO AALL FIX
+    mDescriptionHeader = lwui.buildFixedTextBox(645, 348, 225, 35, tabOneStandardVisibility, NOOP, 18)--TODO AALL FIX
     mDescriptionHeader.text = NO_ITEM_SELECTED_TEXT
     lwui.addTopLevelObject(mDescriptionHeader, "TABBED_WINDOW")
-    mDescriptionTextBox = lwui.buildDynamicHeightTextBox(0, 0, 245, 90, tabOneStandardVisibility, 10)
+    mDescriptionTextBox = lwui.buildDynamicHeightTextBox(0, 0, 245, 90, tabOneStandardVisibility, NOOP, 10)
     local descriptionTextScrollWindow = lwui.buildVerticalScrollContainer(643, 384, 260, 150, tabOneStandardVisibility, mDescriptionTextBox, lwui.testScrollBarSkin)
     lwui.addTopLevelObject(descriptionTextScrollWindow, "TABBED_WINDOW")
 
     --Upper right corner
     --It's a bunch of inventory buttons, representing how many slots you have to hold this stuff you don't have equipped currently.
     --When things get added to the inventory, they'll find the first empty slot here.   So I need to group these buttons in a list somewhere.
-    local inventoryHeader = lwui.buildFixedTextBox(622, mTabTop, 220, 26, tabOneStandardVisibility, 14)
+    local inventoryHeader = lwui.buildFixedTextBox(622, mTabTop, 220, 26, tabOneStandardVisibility, NOOP, 14)
     inventoryHeader.text = "Inventory"
     lwui.addTopLevelObject(inventoryHeader, "TABBED_WINDOW")
     lwui.addTopLevelObject(buildInventoryContainer(), "TABBED_WINDOW")
@@ -379,7 +381,7 @@ local function constructEnhancementsLayout()
     local trashButton = lwui.buildInventoryButton("TrashItemButton", trashX, 280 + trashY, mCrewLineHeight, mCrewLineHeight,
         tabOneStandardVisibility, lwui.spriteRenderFunction("items/trash.png"), inventoryFilterFunctionAny, trashItem)
     lwui.addTopLevelObject(trashButton, "TABBED_WINDOW")
-    local trashHeader = lwui.buildFixedTextBox(trashX - 2, 252 + trashY, 60, 35, tabOneStandardVisibility, 16)
+    local trashHeader = lwui.buildFixedTextBox(trashX - 2, 252 + trashY, 60, 35, tabOneStandardVisibility, NOOP, 16)
     trashHeader.text = "Sell"
     lwui.addTopLevelObject(trashHeader, "TABBED_WINDOW")
     
@@ -439,29 +441,31 @@ if (script) then
         local removedCrew = mCrewChangeObserver.getRemovedCrew()
         for _, crewId in ipairs(removedCrew) do
             local crewmem = lwl.getCrewById(crewId)
-            --print("removing ", crewmem:GetName())
-            local removedLines = {}
-            --remove existing row
-            for _, crewContainer in ipairs(mCrewListContainer.objects) do
-                --print("checking row ", crewContainer[GEX_CREW_ID])
-                if (crewContainer[GEX_CREW_ID] == crewmem.extend.selfId) then
-                    --print("found match! ")
-                    --print("there were N crew ", #mCrewListContainer.objects)
-                    table.insert(removedLines, crewContainer)
-                    mCrewListContainer.objects = lwl.getNewElements(mCrewListContainer.objects, {crewContainer})--todo this is kind of experimental
-                    --print("there are now N crew ", #mCrewListContainer.objects)
+            if crewmem then
+                --print("removing ", crewmem:GetName())
+                local removedLines = {}
+                --remove existing row
+                for _, crewContainer in ipairs(mCrewListContainer.objects) do
+                    --print("checking row ", crewContainer[GEX_CREW_ID])
+                    if (crewContainer[GEX_CREW_ID] == crewmem.extend.selfId) then
+                        --print("found match! ")
+                        --print("there were N crew ", #mCrewListContainer.objects)
+                        table.insert(removedLines, crewContainer)
+                        mCrewListContainer.objects = lwl.getNewElements(mCrewListContainer.objects, {crewContainer})--todo this is kind of experimental
+                        --print("there are now N crew ", #mCrewListContainer.objects)
+                    end
                 end
-            end
-            --remove all the items in removedLines
-            for _, line in ipairs(removedLines) do
-                for _, button in ipairs(line.objects) do
-                    if (button.item) then
-                        if (math.random() > .7) then --maybe you saved it?
-                            addToInventory(button.item)
-                        else
-                            mItemList:remove(button.item._index)
-                            button.item.onRemove(button.item) --todo could be a source of errors, or maybe I just always have to check for crewmem to be nil here.
-                        --print("removed item ", button.item._index)
+                --remove all the items in removedLines
+                for _, line in ipairs(removedLines) do
+                    for _, button in ipairs(line.objects) do
+                        if (button.item) then
+                            if (math.random() > .7) then --maybe you saved it?
+                                addToInventory(button.item)
+                            else
+                                mItemList:remove(button.item._index)
+                                button.item.onRemove(button.item) --todo could be a source of errors, or maybe I just always have to check for crewmem to be nil here.
+                            --print("removed item ", button.item._index)
+                            end
                         end
                     end
                 end
@@ -664,10 +668,14 @@ end
 -------------------Myocardial Overcharger------------------
 local function MyocardialOvercharger(item, crewmem) --todo this kind of sucks because these custom values don't persist, leading to _issues_.
     item.sellValue = 6 + mItemsSold
-    crewmem.health.second = item.storedHealth + (mItemsSold * 5)
+    if not (item.sellValue == item.lastSellValue) then
+        crewmem.health.second = crewmem.extend:GetDefinition().maxHealth + (mItemsSold * 5)
+    end
+    item.lastSellValue = item.sellValue
 end
 local function MyocardialOverchargerEquip(item, crewmem)
     item.storedHealth = crewmem.health.second
+    crewmem.health.second = crewmem.extend:GetDefinition().maxHealth + (mItemsSold * 5)
 end
 local function MyocardialOverchargerRemove(item, crewmem)
     if item.storedHealth and item.storedHealth > 0 then
@@ -725,10 +733,12 @@ Bing Chillin
 local ERROR_RENDER_FUNCTION = lwui.spriteRenderFunction("items/Untitled.png")
 ------------------------------------ITEM DEFINITIONS----------------------------------------------------------
 local function insertItemDefinition(itemDef)
+    --Required
     local name = lwl.setIfNil(itemDef.name, "FORGOT NAME!")
     local itemType = lwl.setIfNil(itemDef.itemType, TYPE_WEAPON)
     local renderFunction = lwl.setIfNil(itemDef.renderFunction, ERROR_RENDER_FUNCTION)
     local description = lwl.setIfNil(itemDef.description, "FORGOT DESCRIPTION!")
+    --Optional
     local onCreate = lwl.setIfNil(itemDef.onCreate, NOOP)
     local onTick = lwl.setIfNil(itemDef.onTick, NOOP)
     local onEquip = lwl.setIfNil(itemDef.onEquip, NOOP)
@@ -742,24 +752,18 @@ end
 --Only add to the bottom, changing the order is breaking.
 insertItemDefinition({name="Shredder Cuffs", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/SpikedCuffs.png"), description="Looking sharp.  Extra damage in melee.", onTick=ShredderCuffs, sellValue=3})
 insertItemDefinition({name="Seal Head", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/SealHead.png"), description="The headbutts it enables are an effective counter to the ridicule you might encounter for wearing such odd headgear.", onTick=SealHead})
-
-
---todo: defaults: noop, 5
-
-table.insert(mEquipmentGenerationTable, buildItemBuilder("Shredder Cuffs", TYPE_WEAPON, lwui.spriteRenderFunction("items/SpikedCuffs.png"), "Looking sharp.  Extra damage in melee.", NOOP, NOOP, NOOP, NOOP, NOOP, NOOP, 3))
-table.insert(mEquipmentGenerationTable, buildItemBuilder("Seal Head", TYPE_ARMOR, lwui.spriteRenderFunction("items/SealHead.png"), "The headbutts it enables are an effective counter to the ridicule you might encounter for wearing such odd headgear.", NOOP, SealHead, NOOP, NOOP, NOOP, NOOP, 5))
-table.insert(mEquipmentGenerationTable, buildItemBuilder("Chicago Typewriter", TYPE_TOOL, lwui.spriteRenderFunction("items/ChicagoTypewriter.png"), "Lots of oomph in these keystrokes.  Adds a bar when manning weapons.", NOOP, ChicagoTypewriter, NOOP, ChicagoTypewriterUnequip, NOOP, NOOP, 5))
-table.insert(mEquipmentGenerationTable, buildItemBuilder("Ballancator", TYPE_ARMOR, lwui.spriteRenderFunction("items/Ballancator.png"), "As all things should be.  Strives to keep its wearer at exactly half health.", NOOP, Ballanceator, NOOP, NOOP, NOOP, NOOP, 5))
-table.insert(mEquipmentGenerationTable, buildItemBuilder("Hellion Halberd", TYPE_WEAPON, lwui.spriteRenderFunction("items/halberd.png"), "A vicious weapon that leaves its victems with gaping wounds that bleed profusely.", NOOP, HellionHalberd, NOOP, NOOP, NOOP, NOOP, 5))
-table.insert(mEquipmentGenerationTable, buildItemBuilder("Peppy Bismol (DUD)", TYPE_TOOL, lwui.spriteRenderFunction("items/peppy_bismol.png"), "'With Peppy Bismol, nothing will be able to keep you down!'  Increases active ability charge rate.", NOOP, PeppyBismol, NOOP, NOOP, NOOP, NOOP, 5))
-table.insert(mEquipmentGenerationTable, buildItemBuilder("Medkit", TYPE_TOOL, lwui.spriteRenderFunction("items/medkit.png"), "Packed full of what whales you.  +15 max health.", NOOP, NOOP, MedkitEquip, MedkitRemove, NOOP, NOOP, 5))
-table.insert(mEquipmentGenerationTable, buildItemBuilder("Orgainc Impulse Grafts", TYPE_ARMOR, lwui.spriteRenderFunction("items/graft_armor.png"), "Quickly rights abnormal status conditions. +5 max health, bleed immunity, stun resist.", NOOP, GraftArmor, GraftArmorEquip, GraftArmorRemove, NOOP, NOOP, 5))
-table.insert(mEquipmentGenerationTable, buildItemBuilder("Testing Status Tool", TYPE_ARMOR, lwui.spriteRenderFunction("items/Untitled.png"), "ALL OF THEM!!!", NOOP, statusTest, statusTestEquip, statusTestRemove, NOOP, NOOP, 15))
-table.insert(mEquipmentGenerationTable, buildItemBuilder("Omelas Generator", TYPE_ARMOR, lwui.spriteRenderFunction("items/leaves_of_good_fortune.png"), "Power, at any cost.  Equiped crew adds four ship power but slowly stacks corruption.", NOOP, OmelasGenerator, OmelasGeneratorEquip, OmelasGeneratorRemove, NOOP, NOOP, 5))
-table.insert(mEquipmentGenerationTable, buildItemBuilder("Ferrogenic Exsanguinator", TYPE_TOOL, lwui.spriteRenderFunction("items/grafted.png"), "'The machine god requires a sacrifice of blood, and I give it gladly.'  Biomechanical tendrils wrap around this crew, extracting their life force to hasten repairs.", NOOP, FerrogenicExsanguinator, NOOP, NOOP, NOOP, NOOP, 5))
-table.insert(mEquipmentGenerationTable, buildItemBuilder("Egg", TYPE_WEAPON, lwui.spriteRenderFunction("items/egg.png"), "Gains 3 sell value each jump.", NOOP, Egg, NOOP, NOOP, NOOP, NOOP, 0))
-table.insert(mEquipmentGenerationTable, buildItemBuilder("Myocardial Overcharger", TYPE_WEAPON, lwui.spriteRenderFunction("items/brain_gang.png"), "Grows in power with each item sold.", NOOP, MyocardialOvercharger, MyocardialOverchargerEquip, MyocardialOverchargerRemove, NOOP, NOOP, 6))
-table.insert(mEquipmentGenerationTable, buildItemBuilder("Holy Symbol", TYPE_WEAPON, HolySymbolRender(), "Renders its wearer neigh impervious to corruption.", NOOP, NOOP, HolySymbolEquip, HolySymbolRemove, NOOP, NOOP, 10))
+insertItemDefinition({name="Chicago Typewriter", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/ChicagoTypewriter.png"), description="Lots of oomph in these keystrokes.  Adds a bar when manning weapons.", onTick=ChicagoTypewriter, onRemove=ChicagoTypewriterUnequip})
+insertItemDefinition({name="Ballancator", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/Ballancator.png"), description="As all things should be.  Strives to keep its wearer at exactly half health.", onTick=Ballanceator})
+insertItemDefinition({name="Hellion Halberd", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/halberd.png"), description="A vicious weapon that leaves its victems with gaping wounds that bleed profusely.", onTick=HellionHalberd})
+insertItemDefinition({name="Peppy Bismol (DUD)", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/peppy_bismol.png"), description="'With Peppy Bismol, nothing will be able to keep you down!'  Increases active ability charge rate.", onTick=PeppyBismol})
+insertItemDefinition({name="Medkit", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/medkit.png"), description="Packed full of what whales you.  +15 max health.", onEquip=MedkitEquip, onRemove=MedkitRemove})
+insertItemDefinition({name="Orgainc Impulse Grafts (DUD)", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/graft_armor.png"), description="Quickly rights abnormal status conditions. +5 max health, bleed immunity, stun resist.", onTick=GraftArmor, onEquip=GraftArmorEquip, onRemove=GraftArmorRemove})
+insertItemDefinition({name="Testing Status Tool", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/Untitled.png"), description="ALL OF THEM!!!", onTick=statusTest, onEquip=statusTestEquip, onRemove=statusTestRemove, sellValue=15})
+insertItemDefinition({name="Omelas Generator", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/leaves_of_good_fortune.png"), description="Power, at any cost.  Equiped crew adds four ship power but slowly stacks corruption.", onTick=OmelasGenerator, onEquip=OmelasGeneratorEquip, onRemove=OmelasGeneratorRemove})
+insertItemDefinition({name="Ferrogenic Exsanguinator", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/grafted.png"), description="'The machine god requires a sacrifice of blood, and I give it gladly.'  Biomechanical tendrils wrap around this crew, extracting their life force to hasten repairs.", onTick=FerrogenicExsanguinator})
+insertItemDefinition({name="Egg", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/egg.png"), description="Gains 3 sell value each jump.", onTick=Egg, sellValue=0})
+insertItemDefinition({name="Myocardial Overcharger (DUD)", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/brain_gang.png"), description="Grows in power with each item sold.", onTick=MyocardialOvercharger, onEquip=MyocardialOverchargerEquip, onRemove=MyocardialOverchargerRemove})
+insertItemDefinition({name="Holy Symbol", itemType=TYPE_WEAPON, renderFunction=HolySymbolRender(), description="Renders its wearer nigh impervious to corruption.", onEquip=HolySymbolEquip, onRemove=HolySymbolRemove, sellValue=10})
 
 ------------------------------------END ITEM DEFINITIONS----------------------------------------------------------
 -----------------------------------------WAYS TO GET ITEMS---------------------------------------------------------------
@@ -799,7 +803,9 @@ script.on_internal_event(Defines.InternalEvents.PRE_CREATE_CHOICEBOX, function(e
     --print("itemChancepre", itemChance)
     --print("itemChance", itemChance)
 end)
-script.on_game_event("START_BEACON_REAL", false, resetInventory)
+script.on_game_event("START_BEACON_REAL", false, function()
+        resetInventory()
+        end)
 
 
 --In the crew loop, each crew will check the items assigned to them and call their onTick functions, (pass themselves in?)
