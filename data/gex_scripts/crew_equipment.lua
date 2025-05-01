@@ -38,7 +38,7 @@ local KEY_EQUIPMENT_GENERATING_INDEX = "GEX_EQUIPMENT_GENERATING_INDEX_"
 local KEY_EQUIPMENT_ASSIGNMENT = "GEX_EQUIPMENT_ASSIGNMENT_"
 
 local mSetupFinished = false
-local mCrewChangeObserver = lwcco.createCrewChangeObserver("crew", 0, false)
+local mCrewChangeObserver = lwcco.createCrewChangeObserver(lwl.filterOwnshipTrueCrew)
 local mCrewListContainer
 local mEquipmentGenerationTable = {}
 local mNameToItemIndexTable = {}
@@ -60,7 +60,7 @@ local mItemsSold = 0
 local mDescriptionHeader
 local mDescriptionTextBox
 local mInventoryButtons = {}
-local scaledLocalTime = 0
+local mScaledLocalTime = 0
 local mFrameCounter = 0
 
 local inventoryRows = 5
@@ -184,6 +184,7 @@ local function trashItem(button, item) --From scrap it came, and to scrap it can
     Hyperspace.Sounds:PlaySoundMix("buy", -1, false)
     mItemsSold = mItemsSold + 1
     mItemsSoldValue = mItemsSoldValue + item.sellValue
+    persistEquipment()
 end
 
 local function buttonAddInventory(button, item)
@@ -311,7 +312,7 @@ local function buildInventoryContainer()
         verticalContainer.addObject(horizContainer)
     end
     return verticalContainer
-end
+end 
 
 --todo toggle active buttons based on crew type.
 local function buildCrewRow(crewmem)
@@ -335,18 +336,8 @@ local function buildCrewRow(crewmem)
 end
 
 local function buildCrewEquipmentScrollBar()
-    local crewScrollBar
-
-    local ownshipManager = Hyperspace.ships(0)
-    local playerCrew = lwl.getAllMemberCrew(ownshipManager, "crew")
-    
-    local verticalContainer = lwui.buildVerticalContainer(0, 0, 300, 20, tabOneStandardVisibility, NOOP,
+    return lwui.buildVerticalContainer(0, 0, 300, 20, tabOneStandardVisibility, NOOP,
         {nameText, weaponButton, armorButton, toolButton}, false, true, mCrewRowPadding)
-    for i=1,#playerCrew do
-        verticalContainer.addObject(buildCrewRow(playerCrew[i]))
-    end
-    
-    return verticalContainer
 end
 
 local function constructEnhancementsLayout()
@@ -401,7 +392,7 @@ that's it, no fancy saving or loading stuff.
 local function tickEquipment()
     local ownshipManager = Hyperspace.ships(0)
     if not ownshipManager then return end
-    local playerCrew = lwl.getAllMemberCrew(ownshipManager, "crew")
+    local playerCrew = lwl.getAllMemberCrewFromFactory(lwl.filterOwnshipTrueCrew)
     for _,crewmem in ipairs(playerCrew) do
         local equips = getCrewEquipment(crewmem)
         --print("ticking", crewmem:GetName(), "has ", #equips, "equipment")
@@ -412,34 +403,27 @@ local function tickEquipment()
     end
 end
 
-local knownCrew = 0
 
 if (script) then
     script.on_internal_event(Defines.InternalEvents.ON_TICK, function()
-        if not Hyperspace.ships(0) or Hyperspace.ships(0).iCustomizeMode == 2 then return end --in hangar
-        if lwl.isPaused() then return end
-        if mFrameCounter < 30 then
-            mFrameCounter = mFrameCounter + 1
-            print(mFrameCounter)
-            return 
-        end
-        if not mCrewChangeObserver.isInitialized() then print("lwce obby not init") return end
-        if not mSetupFinished then
-            --resetPersistedValues() --todo remove
-            --print("Setting up items")
-            constructEnhancementsLayout()
-            mCrewChangeObserver.saveLastSeenState() --hey what? todo try removing
-            loadPersistedEquipment()
-            mSetupFinished = true
-        end
+        if not lwl.isPaused() then
             --[[ formula to turn ticks into 1/32 second
             16 / speedFactor = ticks per second
             tps * functor = 32
             --]]
-        scaledLocalTime = scaledLocalTime + (Hyperspace.FPS.SpeedFactor * 16)
-        if (scaledLocalTime > 1) then
-            tickEquipment()
-            scaledLocalTime = 0
+            mScaledLocalTime = mScaledLocalTime + (Hyperspace.FPS.SpeedFactor * 16)
+            if (mScaledLocalTime > 1) then
+                tickEquipment()
+                mScaledLocalTime = 0
+            end
+        end
+    end)
+    
+    script.on_internal_event(Defines.InternalEvents.ON_TICK, function()
+        if not mCrewChangeObserver.isInitialized() then print("lwce obby not init") return end
+        if not mSetupFinished then
+            --resetPersistedValues() --todo remove
+            constructEnhancementsLayout()
         end
         
         --Update crew table
@@ -448,7 +432,6 @@ if (script) then
         for _, crewId in ipairs(removedCrew) do
             local crewmem = lwl.getCrewById(crewId)
             if crewmem then
-                --print("removing ", crewmem:GetName())
                 local removedLines = {}
                 --remove existing row
                 for _, crewContainer in ipairs(mCrewListContainer.objects) do
@@ -479,24 +462,14 @@ if (script) then
         end
         for _, crewId in ipairs(addedCrew) do
             local crewmem = lwl.getCrewById(crewId)
-            --print("adding ", crewmem:GetName())
             mCrewListContainer.addObject(buildCrewRow(crewmem))
         end
         
-        --print("EQUIPMENT: Compare ", #mCrewListContainer.objects, knownCrew, knownCrew == #mCrewListContainer.objects)
-        if not (knownCrew == #mCrewListContainer.objects) then
-            --[[local crewString = ""
-            for i=1,#mCrewListContainer.objects do
-                crewString = crewString..(lwl.getCrewById(mCrewListContainer.objects[i][GEX_CREW_ID]):GetName())
-            end--]]
-            --print("EQUIPMENT: There are now this many crew known about: ", #mCrewListContainer.objects, crewString)
-            knownCrew = #mCrewListContainer.objects
+        if not mSetupFinished then
+            loadPersistedEquipment()
+            mSetupFinished = true
         end
-
-        if (#addedCrew > 0 or #removedCrew > 0) then
-            --print("num crew changed since last update ", addedCrew, removedCrew)
-            persistEquipment()
-        end
+        --print("equipment saving last seen state")
         mCrewChangeObserver.saveLastSeenState()
     end)
     
@@ -626,8 +599,8 @@ local function GraftArmorRemove(item, crewmem)
 end
 -------------------It's Terrible!------------------
 local function statusTestEquip(item, crewmem)
-    lwce.applyBleed(crewmem, 2)
-    lwce.applyConfusion(crewmem, 2)
+    lwce.applyBleed(crewmem, 3)
+    lwce.applyConfusion(crewmem, 3)
     --print("Applying corruption!")
     lwce.applyCorruption(crewmem, .2)
 end
@@ -763,7 +736,7 @@ insertItemDefinition({name="Chicago Typewriter", itemType=TYPE_TOOL, renderFunct
 insertItemDefinition({name="Ballancator", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/Ballancator.png"), description="As all things should be.  Strives to keep its wearer at exactly half health.", onTick=Ballanceator})
 insertItemDefinition({name="Hellion Halberd", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/halberd.png"), description="A vicious weapon that leaves its victems with gaping wounds that bleed profusely.", onTick=HellionHalberd})
 insertItemDefinition({name="Peppy Bismol (DUD)", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/peppy_bismol.png"), description="'With Peppy Bismol, nothing will be able to keep you down!'  Increases active ability charge rate.", onTick=PeppyBismol})
-insertItemDefinition({name="Medkit", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/medkit.png"), description="Packed full of what whales you.  +15 max health.", onEquip=MedkitEquip, onRemove=MedkitRemove})
+insertItemDefinition({name="Medkit (DUD)", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/medkit.png"), description="Packed full of what whales you.  +15 max health.", onEquip=MedkitEquip, onRemove=MedkitRemove})
 insertItemDefinition({name="Orgainc Impulse Grafts (DUD)", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/graft_armor.png"), description="Quickly rights abnormal status conditions. +5 max health, bleed immunity, stun resist.", onTick=GraftArmor, onEquip=GraftArmorEquip, onRemove=GraftArmorRemove})
 insertItemDefinition({name="Testing Status Tool", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/Untitled.png"), description="ALL OF THEM!!!", onTick=statusTest, onEquip=statusTestEquip, onRemove=statusTestRemove, sellValue=15})
 insertItemDefinition({name="Omelas Generator", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/leaves_of_good_fortune.png"), description="Power, at any cost.  Equiped crew adds four ship power but slowly stacks corruption.", onTick=OmelasGenerator, onEquip=OmelasGeneratorEquip, onRemove=OmelasGeneratorRemove})
@@ -815,7 +788,6 @@ script.on_game_event("START_BEACON_REAL", false, function()
             resetInventory()
         end
         resetPersistedValues()
-        mFrameCounter = 33
         end)
 
 
