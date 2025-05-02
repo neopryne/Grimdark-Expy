@@ -88,8 +88,8 @@ local function buildItemBuilder(name, itemType, renderFunction, description, onC
         builtItem.onPersist = onPersist
         builtItem.onLoad = onLoad
         mNameToItemIndexTable[name] = generating_index
-        --print("built item from index ", generating_index)
         mItemList:append(builtItem)
+        --print("built item, item list now has ", mItemList.length)
         return builtItem
     end
 end
@@ -150,6 +150,7 @@ local function resetInventory()
             end
         end
     end
+    mItemList = lwsil.SelfIndexingList:new()
     mCrewListContainer.objects = {} --todo this removes starting crew, find a better way to do whatever this is.
 end
 
@@ -175,16 +176,20 @@ local function iButtonTryUnequipPrevious(button, item)
     end
 end
 
-local function trashItem(button, item) --From scrap it came, and to scrap it can return.
+local function deleteItem(button, item)
     iButtonTryUnequipPrevious(button, item)
     mItemList:remove(item._index)
     button.item = nil
     item.assigned_slot = -2 --destroyed
+    persistEquipment()
+end
+
+local function trashItem(button, item) --From scrap it came, and to scrap it can return.
     Hyperspace.ships(0):ModifyScrapCount(item.sellValue, false)
     Hyperspace.Sounds:PlaySoundMix("buy", -1, false)
     mItemsSold = mItemsSold + 1
     mItemsSoldValue = mItemsSoldValue + item.sellValue
-    persistEquipment()
+    deleteItem(button, item)
 end
 
 local function buttonAddInventory(button, item)
@@ -261,6 +266,7 @@ persistEquipment = function()
         local equipment = mItemList:get(i)
         if (equipment.generating_index == nil) or (equipment.assigned_slot == nil) then
             lwl.logError(TAG, "Could not persist "..equipment.name..": incomplete values.")
+            --print(equipment.generating_index, equipment.assigned_slot)
         else
             successes = successes + 1
             --print("persisting ", equipment.name, " genIndx ", equipment.generating_index, " slot ", equipment.assigned_slot)
@@ -280,7 +286,11 @@ local function loadPersistedEquipment()
         --print("index ", generationTableIndex)
         local item = mEquipmentGenerationTable[generationTableIndex]()
         local position = Hyperspace.metaVariables[KEY_EQUIPMENT_ASSIGNMENT..i]
-        --print("loading ", item.name, " genIndx ", item.generating_index, " slot ", item.assigned_slot)
+        --print("loading ", item.name, " genIndx ", item.generating_index, " slot ", position)
+        if position == nil then 
+            position = -2
+            item.assigned_slot = -2
+        end
         if position == -1 then
             addToInventory(item)
         else
@@ -397,7 +407,7 @@ local function tickEquipment()
         local equips = getCrewEquipment(crewmem)
         --print("ticking", crewmem:GetName(), "has ", #equips, "equipment")
         for _,item in ipairs(equips) do
-            --print("ticking", crewmem:GetName(), "'s", item.name)
+            --print("ticking", crewmem:GetName(), crewmem.extend.selfId, "'s", item.name)
             item.onTick(item, crewmem)
         end
     end
@@ -420,7 +430,7 @@ if (script) then
     end)
     
     script.on_internal_event(Defines.InternalEvents.ON_TICK, function()
-        if not mCrewChangeObserver.isInitialized() then print("lwce obby not init") return end
+        if not mCrewChangeObserver.isInitialized() then return end
         if not mSetupFinished then
             --resetPersistedValues() --todo remove
             constructEnhancementsLayout()
@@ -430,31 +440,27 @@ if (script) then
         local addedCrew = mCrewChangeObserver.getAddedCrew()
         local removedCrew = mCrewChangeObserver.getRemovedCrew()
         for _, crewId in ipairs(removedCrew) do
-            local crewmem = lwl.getCrewById(crewId)
-            if crewmem then
-                local removedLines = {}
-                --remove existing row
-                for _, crewContainer in ipairs(mCrewListContainer.objects) do
-                    --print("checking row ", crewContainer[GEX_CREW_ID])
-                    if (crewContainer[GEX_CREW_ID] == crewmem.extend.selfId) then
-                        --print("found match! ")
-                        --print("there were N crew ", #mCrewListContainer.objects)
-                        table.insert(removedLines, crewContainer)
-                        mCrewListContainer.objects = lwl.getNewElements(mCrewListContainer.objects, {crewContainer})--todo this is kind of experimental
-                        --print("there are now N crew ", #mCrewListContainer.objects)
-                    end
+            --print("eq crew removed id ", crewId)
+            local removedLines = {}
+            --remove existing row
+            for _, crewContainer in ipairs(mCrewListContainer.objects) do
+                --print("checking row ", crewContainer[GEX_CREW_ID])
+                if (crewContainer[GEX_CREW_ID] == crewId) then
+                    --print("found match! ")
+                    --print("there were N crew ", #mCrewListContainer.objects)
+                    table.insert(removedLines, crewContainer)
+                    mCrewListContainer.objects = lwl.getNewElements(mCrewListContainer.objects, {crewContainer})--todo this is kind of experimental
+                    --print("there are now N crew ", #mCrewListContainer.objects)
                 end
-                --remove all the items in removedLines
-                for _, line in ipairs(removedLines) do
-                    for _, button in ipairs(line.objects) do
-                        if (button.item) then
-                            if (math.random() > .7) then --maybe you saved it?
-                                addToInventory(button.item)
-                            else
-                                mItemList:remove(button.item._index)
-                                button.item.onRemove(button.item) --todo could be a source of errors, or maybe I just always have to check for crewmem to be nil here.
-                            --print("removed item ", button.item._index)
-                            end
+            end
+            --remove all the items in removedLines
+            for _, line in ipairs(removedLines) do
+                for _, button in ipairs(line.objects) do
+                    if (button.item) then
+                        if (math.random() > .7) then --maybe you saved it?
+                            addToInventory(button.item)
+                        else
+                            deleteItem(button, item)
                         end
                     end
                 end
@@ -462,6 +468,7 @@ if (script) then
         end
         for _, crewId in ipairs(addedCrew) do
             local crewmem = lwl.getCrewById(crewId)
+            --print("eq crew added ", crewId, crewmem:GetName())
             mCrewListContainer.addObject(buildCrewRow(crewmem))
         end
         
@@ -728,7 +735,7 @@ local function insertItemDefinition(itemDef)
     local sellValue = lwl.setIfNil(itemDef.sellValue, 5)
     table.insert(mEquipmentGenerationTable, buildItemBuilder(name, itemType, renderFunction, description, onCreate, onTick, onEquip, onRemove, onPersist, onLoad, sellValue))
 end
-
+print("numequips before (should be 0)", #mEquipmentGenerationTable)
 --Only add to the bottom, changing the order is breaking.
 insertItemDefinition({name="Shredder Cuffs", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/SpikedCuffs.png"), description="Looking sharp.  Extra damage in melee.", onTick=ShredderCuffs, sellValue=3})
 insertItemDefinition({name="Seal Head", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/SealHead.png"), description="The headbutts it enables are an effective counter to the ridicule you might encounter for wearing such odd headgear.", onTick=SealHead})
@@ -744,6 +751,7 @@ insertItemDefinition({name="Ferrogenic Exsanguinator", itemType=TYPE_TOOL, rende
 insertItemDefinition({name="Egg", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/egg.png"), description="Gains 3 sell value each jump.", onTick=Egg, sellValue=0})
 insertItemDefinition({name="Myocardial Overcharger (DUD)", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/brain_gang.png"), description="Grows in power with each item sold.", onTick=MyocardialOvercharger, onEquip=MyocardialOverchargerEquip, onRemove=MyocardialOverchargerRemove})
 insertItemDefinition({name="Holy Symbol", itemType=TYPE_WEAPON, renderFunction=HolySymbolRender(), description="Renders its wearer nigh impervious to corruption.", onEquip=HolySymbolEquip, onRemove=HolySymbolRemove, sellValue=10})
+print("numequips after", #mEquipmentGenerationTable)
 
 ------------------------------------END ITEM DEFINITIONS----------------------------------------------------------
 -----------------------------------------WAYS TO GET ITEMS---------------------------------------------------------------
@@ -754,6 +762,7 @@ function gex_give_item(index)
 end
 
 function gex_give_all_items()
+    print("giving ", #mEquipmentGenerationTable)
    for _,equipGen in ipairs(mEquipmentGenerationTable) do
        addToInventory(equipGen())
     end
