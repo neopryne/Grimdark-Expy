@@ -203,23 +203,32 @@ local function buttonAddInventory(button, item)
     persistEquipment()
 end
 
-local function addToCrew(item, crewId) --find the button to add it to and call that.
-    --print("addToCrew")
+local function getCrewButton(crewId, itemType)
     for _, crewContainer in ipairs(mCrewListContainer.objects) do
         --print("checking row ", crewContainer[GEX_CREW_ID])
         if (crewContainer[GEX_CREW_ID] == crewId) then
             --print("crew found, adding ", item.name)
             for _, iButton in ipairs(crewContainer.objects) do
                 --print("checking for buttons ", iButton.className)
-                if (iButton.className == "inventoryButton") then
-                    if (iButton.addItem(item)) then
-                        return true
+                if (iButton.className == "inventoryButton") then--todo expose these values
+                    if (iButton.itemType == itemType) then
+                        return iButton
                     end
                 end
             end
         end
     end
-    return false
+end
+
+local function addToCrew(item, crewId) --find the button to add it to and call that.
+    --print("addToCrew")
+    local button = getCrewButton(crewId, item.itemType)
+    return button.addItem(item)
+end
+
+local function getEquippedItem(crewId, itemType)
+    local button = getCrewButton(crewId, itemType)
+    return button.item
 end
 
 local function buttonAddToCrew(button, item)
@@ -340,6 +349,9 @@ local function buildCrewRow(crewmem)
         tabOneStandardVisibility, lwui.inventoryButtonDefault, inventoryFilterFunctionArmor, buttonAddToCrew)
     local toolButton = lwui.buildInventoryButton(crewmem.extend.selfId..TOOL_BUTTON_SUFFIX, 0, 0, mCrewLineHeight, mCrewLineHeight,
         tabOneStandardVisibility, lwui.inventoryButtonDefault, inventoryFilterFunctionTool, buttonAddToCrew)
+    weaponButton.itemType = TYPE_WEAPON
+    armorButton.itemType = TYPE_ARMOR
+    toolButton.itemType = TYPE_TOOL
     local horizContainer = lwui.buildHorizontalContainer(3, 0, 100, mCrewLineHeight, tabOneStandardVisibility, NOOP,
         {anim, nameText, weaponButton, armorButton, toolButton}, true, false, mCrewLinePadding)
     --kind of dirty to apply it to all of these but it's not that bad.
@@ -518,7 +530,7 @@ local function ShredderCuffs(item, crewmem)
         local foeShipManager = Hyperspace.ships(1)
         foes_at_point = lwl.get_ship_crew_point(ownshipManager, foeShipManager, crewmem.x, crewmem.y)
         for _,foe in ipairs(foes_at_point) do
-            foe:DirectModifyHealth(-.005)
+            foe:DirectModifyHealth(-.05)
         end
     end
 end
@@ -824,6 +836,49 @@ local function InternecionCube(item, crewmem)
         --todo damage everyone, increase heal.
     end
 end
+-------------------P.G.O------------------
+local PGO_NAME = "Perfectly Generic Object"
+local PGO_DESCRIPTION = "There's not much to say about this little green cube."
+local PGO_SPRITE = "items/pgo.png"
+
+local function PerfectlyGenericObjectCreate(item)
+    gex_give_item(19)
+    gex_give_item(19)
+end
+
+local PGO_DEFINITION = {name=PGO_NAME, itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction(PGO_SPRITE), description=PGO_DESCRIPTION}
+local THREE_PGO_DEFINITION = {name=PGO_NAME, itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction(PGO_SPRITE), description=PGO_DESCRIPTION, onCreate=PerfectlyGenericObjectCreate}
+-- a small chance each jump to spawn another?  No, that will be a different thing.  Then more things that care about the number of things you have.
+-------------------Thief's Hand------------------
+--todo They're gonna combine??
+local VOID_RING_NAME = "Ring of Void (DUD)"
+local THIEFS_HAND_DESCRIPTION_DORMANT = "Said to once belong to the greatest thief in the multiverse, this disembodied hand has the ability to steal from space itself!  The spoils though, are much less remarkable."
+local THIEFS_HAND_DESCRIPTION_WOKEN = "Said to once belong to the greatest thief in the multiverse, this disembodied hand has the ability to steal from space itself!  Drawing on the ring's power, it pulls even the most obscure whatsits into existence."
+
+local function ThiefsHand(item, crewmem)
+    if item.jumping and not Hyperspace.ships(0).bJumping then
+        if (getEquippedItem(crewmem.extend.selfId, TYPE_WEAPON).name == VOID_RING_NAME) then
+            item.description = THIEFS_HAND_DESCRIPTION_WOKEN
+            if (math.random() > .2) then
+                gex_give_random_item()
+            end
+        else
+            item.description = THIEFS_HAND_DESCRIPTION_DORMANT
+            if (math.random() > .9) then
+                createSinglePgo()
+            end
+        end
+    end
+    item.jumping = Hyperspace.ships(0).bJumping
+end
+
+-------------------Ring of Void------------------
+--Thief's Hand now spawns all objects when equipped to the same person.  Also increases spawn chance to 80%.
+--Weapon. Makes the wearer untargetable in combat, but unable to fight. (1.20)
+local function VoidRing(item, crewmem)
+    --todo
+end
+
 --[[
 todo persist status effects on crew
 Torpor Projector
@@ -843,8 +898,9 @@ A fun thing might look at how many effects are on a given crew.  It should be ea
 Galpegar
 Noctus
 The Thunderskin  --Crew cannot fight and gains 100 (double?) health. When in a room with injured allies, bleeds profusely and heals them.  Needs statboost for the cannot fight probably.
-
+Three Perfectly Generic Objects : on create, give it a value and then have it make one with value - 1
 Sthenic Venom
+A cursed item that autoequips
 Item that get stronger the more items you sell.
 --todo item onLoad onPersist methods for things that need to save stuff
 Blood is Mine, something else I forgot for art assets
@@ -859,7 +915,7 @@ Bing Chillin
 --]]
 local ERROR_RENDER_FUNCTION = lwui.spriteRenderFunction("items/Untitled.png")
 ------------------------------------ITEM DEFINITIONS----------------------------------------------------------
-local function insertItemDefinition(itemDef)
+local function buildBlueprintFromDefinition(itemDef)
     --Required
     local name = lwl.setIfNil(itemDef.name, "FORGOT NAME!")
     local itemType = lwl.setIfNil(itemDef.itemType, TYPE_WEAPON)
@@ -873,9 +929,14 @@ local function insertItemDefinition(itemDef)
     local onPersist = lwl.setIfNil(itemDef.onPersist, NOOP)
     local onLoad = lwl.setIfNil(itemDef.onLoad, NOOP)
     local sellValue = lwl.setIfNil(itemDef.sellValue, 5)
-    table.insert(mEquipmentGenerationTable, buildItemBuilder(name, itemType, renderFunction, description, onCreate, onTick, onEquip, onRemove, onPersist, onLoad, sellValue))
+    return buildItemBuilder(name, itemType, renderFunction, description, onCreate, onTick, onEquip, onRemove, onPersist, onLoad, sellValue)
 end
-print("numequips before (should be 0)", #mEquipmentGenerationTable)
+
+local function insertItemDefinition(itemDef)
+    table.insert(mEquipmentGenerationTable, buildBlueprintFromDefinition(itemDef))
+    --print("Adding ", itemDef.name, " with index", #mEquipmentGenerationTable)
+end
+--print("numequips before (should be 0)", #mEquipmentGenerationTable)
 --Only add to the bottom, changing the order is breaking.
 insertItemDefinition({name="Shredder Cuffs", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/SpikedCuffs.png"), description="Looking sharp.  Extra damage in melee.", onTick=ShredderCuffs, sellValue=3})
 insertItemDefinition({name="Seal Head", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/SealHead.png"), description="The headbutts it enables are an effective counter to the ridicule you might encounter for wearing such odd headgear.", onTick=SealHead})
@@ -895,7 +956,11 @@ insertItemDefinition({name="Interfangilator", itemType=TYPE_TOOL, renderFunction
 insertItemDefinition({name="Custom Interfangilator", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/custom_detector.png"), description="Their expertise becomes their sword, and enemy systems fall. An aftermarket model which scales based on the crew's skill level with the current system.", onEquip=InterfangilatorEquip, onTick=CustomInterfangilator, onRemove=CustomInterfangilatorRemove})
 insertItemDefinition({name="Compactifier (DUD)", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/decrepit paper.png"), description="Nearly illegible documents stating that this crew 'Doesn't count'.", onEquip=CompactifierEquip, onRemove=CompactifierRemove})
 insertItemDefinition({name="Internecion Cube", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/internecion_cube.png"), description=IC_on_TEXT, onEquip=InternecionCubeEquip, onTick=InternecionCube})
-print("numequips after", #mEquipmentGenerationTable)
+insertItemDefinition(PGO_DEFINITION)
+insertItemDefinition(THREE_PGO_DEFINITION)
+insertItemDefinition({name="Thief's Hand", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/thiefs_hand.png"), description=THIEFS_HAND_DESCRIPTION_DORMANT, onTick=ThiefsHand})
+insertItemDefinition({name=VOID_RING_NAME, itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/ring_of_void.png"), description="Greater than what it seems.  Equipped crew can't fight or be targeted in combat."})
+--print("numequips after", #mEquipmentGenerationTable)
 
 ------------------------------------END ITEM DEFINITIONS----------------------------------------------------------
 -----------------------------------------WAYS TO GET ITEMS---------------------------------------------------------------
@@ -944,6 +1009,7 @@ script.on_game_event("START_BEACON_REAL", false, function()
         end)
 
 
+---------------------Things with Dependencies-----------------------------------
 --In the crew loop, each crew will check the items assigned to them and call their onTick functions, (pass themselves in?)
 --It is the job of the items to do everything wrt their functionality.
 --"Cursed" items that can't be unequipped
