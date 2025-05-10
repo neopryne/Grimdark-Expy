@@ -47,6 +47,7 @@ local mCrewChangeObserver = lwcco.createCrewChangeObserver(lwl.filterOwnshipTrue
 local mCrewListContainer
 local mEquipmentGenerationTable = {}
 local mNameToItemIndexTable = {}
+local mSecretIndices = {}
 local mTabbedWindow = ""
 local mTab = 1
 local mGlobal = Hyperspace.Global.GetInstance()
@@ -83,8 +84,10 @@ end
 local tabOneStandardVisibility = generateStandardVisibilityFunction(ENHANCEMENTS_TAB_NAME, EQUIPMENT_SUBTAB_INDEX)
 
 --todo maybe helper functions to build items?  idk im not happy with this yet.
-local function buildItemBuilder(name, itemType, renderFunction, description, onCreate, onTick, onEquip, onRemove, onPersist, onLoad, sellValue)
+local function buildItemBuilder(name, itemType, renderFunction, description, onCreate, onTick, onEquip, onRemove, onPersist, onLoad, sellValue, secret)
     local generating_index = #mEquipmentGenerationTable + 1
+    mNameToItemIndexTable[name] = generating_index
+    print("Added key", name, "value", mNameToItemIndexTable[name])
     return function()
         local builtItem = lwui.buildItem(name, itemType, EQUIPMENT_ICON_SIZE, EQUIPMENT_ICON_SIZE,
                 tabOneStandardVisibility, renderFunction, description, onCreate, onTick, onEquip, onRemove)
@@ -92,8 +95,10 @@ local function buildItemBuilder(name, itemType, renderFunction, description, onC
         builtItem.sellValue = sellValue
         builtItem.onPersist = onPersist
         builtItem.onLoad = onLoad
-        mNameToItemIndexTable[name] = generating_index
         mItemList:append(builtItem)
+        if secret then
+            table.insert(mSecretIndices, generating_index)
+        end
         --print("built item, item list now has ", mItemList.length)
         return builtItem
     end
@@ -169,7 +174,7 @@ local function addToInventory(item)
     return false
 end
 
-local function iButtonTryUnequipPrevious(button, item)
+local function itemTryUnequipPrevious(item)
     if item.assigned_slot ~= nil and item.assigned_slot >= 0 then
         --print("added from crew ", item.assigned_slot)
         local crewmem = lwl.getCrewById(item.assigned_slot)
@@ -182,7 +187,7 @@ local function iButtonTryUnequipPrevious(button, item)
 end
 
 local function deleteItem(button, item)
-    iButtonTryUnequipPrevious(button, item)
+    itemTryUnequipPrevious(item)
     mItemList:remove(item._index)
     button.item = nil
     item.assigned_slot = -2 --destroyed
@@ -198,7 +203,7 @@ local function trashItem(button, item) --From scrap it came, and to scrap it can
 end
 
 local function buttonAddInventory(button, item)
-    iButtonTryUnequipPrevious(button, item)
+    itemTryUnequipPrevious(item)
     item.assigned_slot = -1
     persistEquipment()
 end
@@ -233,7 +238,7 @@ end
 
 local function buttonAddToCrew(button, item)
     --print("buttonaddToCrew")
-    iButtonTryUnequipPrevious(button, item)
+    itemTryUnequipPrevious(item)
     local crewmem = lwl.getCrewById(button[GEX_CREW_ID])
     --print("added ", item.name, " to ", crewmem:GetName())
     if (item.fromLoad) then --Do the unequip that should have happened when we quit the game.
@@ -279,7 +284,7 @@ persistEquipment = function()
     for i=1,numEquipment do
         local equipment = mItemList:get(i)
         if (equipment.generating_index == nil) or (equipment.assigned_slot == nil) then
-            lwl.logError(TAG, "Could not persist "..equipment.name..": incomplete values.")
+            print(TAG, "ERROR: Could not persist "..equipment.name..": incomplete values.", equipment.generating_index, equipment.assigned_slot)
             --print(equipment.generating_index, equipment.assigned_slot)
         else
             successes = successes + 1
@@ -430,8 +435,8 @@ local function tickEquipment()
     end
 end
 
-
 script.on_internal_event(Defines.InternalEvents.ON_TICK, function()
+    if not lwce.isInitialized() then return end
     if not lwl.isPaused() then
         --[[ formula to turn ticks into 1/32 second
         16 / speedFactor = ticks per second
@@ -444,7 +449,6 @@ script.on_internal_event(Defines.InternalEvents.ON_TICK, function()
         end
     end
     if not mScaledLocalTime == 0 then return end
-    if not mCrewChangeObserver.isInitialized() then return end
     if not mSetupFinished then
         --resetPersistedValues() --todo remove
         constructEnhancementsLayout()
@@ -692,10 +696,12 @@ local function HolySymbolRender()
 end
 
 local function HolySymbolEquip(item, crewmem)
+    print("Holy symbol equipped!")
     lwce.addResist(crewmem, lwce.KEY_CORRUPTION, .9)
 end
 
 local function HolySymbolRemove(item, crewmem)
+    print("Holy symbol removed!")
     lwce.addResist(crewmem, lwce.KEY_CORRUPTION, -.9)
 end
 -------------------Interfangilator------------------
@@ -749,7 +755,7 @@ local function Interfangilator(item, crewmem)
     item.jumping = Hyperspace.ships(0).bJumping
     
     if item.ready or ((item.system ~= crewmem.currentSystem) and (item.shipId == crewmem.iShipId)) then
-        print("IFID is now ", crewmem.iManningId)
+        --print("IFID is now ", crewmem.iManningId)
         InterfangilatorRemoveEffect(item, crewmem, 1)
         InterfangilatorApplyEffect(item, crewmem, 1)
         item.ready = false
@@ -775,7 +781,7 @@ local function CustomInterfangilator(item, crewmem)
     item.jumping = Hyperspace.ships(0).bJumping
     
     if item.ready or ((item.system ~= crewmem.currentSystem) and (item.shipId == crewmem.iShipId)) then
-        print("CIFID is now ", crewmem.iManningId)
+        --print("CIFID is now ", crewmem.iManningId)
         --todo misbehaves if crew skilled up while active, but that happens like twice.
         item.storedValue = lwl.setIfNil(item.storedValue, CustomInterfangilatorLevel(item, crewmem))
         InterfangilatorRemoveEffect(item, crewmem, item.storedValue)
@@ -838,47 +844,78 @@ local function InternecionCube(item, crewmem)
 end
 -------------------P.G.O------------------
 local PGO_NAME = "Perfectly Generic Object"
+local THREE_PGO_NAME = "Perfectly Generic Object " --names need to be unique for the name to id table to work
 local PGO_DESCRIPTION = "There's not much to say about this little green cube."
 local PGO_SPRITE = "items/pgo.png"
 
 local function PerfectlyGenericObjectCreate(item)
-    gex_give_item(19)
-    gex_give_item(19)
+    gex_give_item(mNameToItemIndexTable[PGO_NAME])
+    gex_give_item(mNameToItemIndexTable[PGO_NAME])
 end
 
-local PGO_DEFINITION = {name=PGO_NAME, itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction(PGO_SPRITE), description=PGO_DESCRIPTION}
-local THREE_PGO_DEFINITION = {name=PGO_NAME, itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction(PGO_SPRITE), description=PGO_DESCRIPTION, onCreate=PerfectlyGenericObjectCreate}
+local PGO_DEFINITION = {name=PGO_NAME, itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction(PGO_SPRITE), description=PGO_DESCRIPTION, secret=true}
+local THREE_PGO_DEFINITION = {name=THREE_PGO_NAME, itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction(PGO_SPRITE),
+    description=PGO_DESCRIPTION, onCreate=PerfectlyGenericObjectCreate}
 -- a small chance each jump to spawn another?  No, that will be a different thing.  Then more things that care about the number of things you have.
+-------------------Awoken Thief's Hand------------------
+local AWOKEN_THIEFS_HAND_DESCRIPTION = "Said to once belong to the greatest thief in the multiverse, this disembodied hand has the ability to steal from space itself!  Empowered by the ring', it draws even the most obscure whatsits into existence."
+local AWOKEN_THIEFS_HAND_NAME = "Awoken Rogue's Hand"
+
+local function AwokenThiefsHand(item, crewmem)
+    if item.jumping and not Hyperspace.ships(0).bJumping then
+        if (math.random() > .2) then
+            gex_give_random_item()
+        end
+    end
+    item.jumping = Hyperspace.ships(0).bJumping
+    --todo maybe add the base void ring effect.
+end
 -------------------Thief's Hand------------------
 --todo They're gonna combine??
 local VOID_RING_NAME = "Ring of Void (DUD)"
+local THIEFS_HAND_NAME = "Thief's Hand"
 local THIEFS_HAND_DESCRIPTION_DORMANT = "Said to once belong to the greatest thief in the multiverse, this disembodied hand has the ability to steal from space itself!  The spoils though, are much less remarkable."
-local THIEFS_HAND_DESCRIPTION_WOKEN = "Said to once belong to the greatest thief in the multiverse, this disembodied hand has the ability to steal from space itself!  Drawing on the ring's power, it pulls even the most obscure whatsits into existence."
+
+local function thiefsHandMerge(crewmem)
+    local voidRingButton = getCrewButton(crewmem.extend.selfId, TYPE_WEAPON)
+    local thiefsHandButton = getCrewButton(crewmem.extend.selfId, TYPE_TOOL)
+    deleteItem(voidRingButton, voidRingButton.item)
+    deleteItem(thiefsHandButton, thiefsHandButton.item)
+    gex_give_item(mNameToItemIndexTable[AWOKEN_THIEFS_HAND_NAME])
+    Hyperspace.Sounds:PlaySoundMix("levelup", -1, false)
+end
+
+local function ThiefsHandEquip(item, crewmem)
+    local otherItem = getEquippedItem(crewmem.extend.selfId, TYPE_WEAPON)
+    if not otherItem then return end
+    print("hand", otherItem.name)
+    if (otherItem.name == VOID_RING_NAME) then
+        thiefsHandMerge(crewmem)
+    end
+end
 
 local function ThiefsHand(item, crewmem)
     if item.jumping and not Hyperspace.ships(0).bJumping then
-        if (getEquippedItem(crewmem.extend.selfId, TYPE_WEAPON).name == VOID_RING_NAME) then
-            item.description = THIEFS_HAND_DESCRIPTION_WOKEN
-            if (math.random() > .2) then
-                gex_give_random_item()
-            end
-        else
-            item.description = THIEFS_HAND_DESCRIPTION_DORMANT
-            if (math.random() > .9) then
-                createSinglePgo()
-            end
+        if (math.random() > .9) then
+            gex_give_item(mNameToItemIndexTable[PGO_NAME])
         end
     end
     item.jumping = Hyperspace.ships(0).bJumping
 end
-
 -------------------Ring of Void------------------
 --Thief's Hand now spawns all objects when equipped to the same person.  Also increases spawn chance to 80%.
---Weapon. Makes the wearer untargetable in combat, but unable to fight. (1.20)
-local function VoidRing(item, crewmem)
-    --todo
+local function VoidRingEquip(item, crewmem)
+    local otherItem = getEquippedItem(crewmem.extend.selfId, TYPE_TOOL)
+    if not otherItem then return end
+    print("void", otherItem.name)
+    if (otherItem.name == THIEFS_HAND_NAME) then
+        thiefsHandMerge(crewmem)
+    end
 end
 
+local function VoidRing(item, crewmem)
+    --todo Makes the wearer untargetable in combat, but unable to fight. (1.20)
+end
 --[[
 todo persist status effects on crew
 Torpor Projector
@@ -898,7 +935,6 @@ A fun thing might look at how many effects are on a given crew.  It should be ea
 Galpegar
 Noctus
 The Thunderskin  --Crew cannot fight and gains 100 (double?) health. When in a room with injured allies, bleeds profusely and heals them.  Needs statboost for the cannot fight probably.
-Three Perfectly Generic Objects : on create, give it a value and then have it make one with value - 1
 Sthenic Venom
 A cursed item that autoequips
 Item that get stronger the more items you sell.
@@ -912,6 +948,7 @@ A collection of the latest tracks from backwater bombshell Futanari Titwhore Fia
 Swankerdino
 Swankerpino
 Bing Chillin
+
 --]]
 local ERROR_RENDER_FUNCTION = lwui.spriteRenderFunction("items/Untitled.png")
 ------------------------------------ITEM DEFINITIONS----------------------------------------------------------
@@ -929,7 +966,8 @@ local function buildBlueprintFromDefinition(itemDef)
     local onPersist = lwl.setIfNil(itemDef.onPersist, NOOP)
     local onLoad = lwl.setIfNil(itemDef.onLoad, NOOP)
     local sellValue = lwl.setIfNil(itemDef.sellValue, 5)
-    return buildItemBuilder(name, itemType, renderFunction, description, onCreate, onTick, onEquip, onRemove, onPersist, onLoad, sellValue)
+    local secret = lwl.setIfNil(itemDef.secret, false)
+    return buildItemBuilder(name, itemType, renderFunction, description, onCreate, onTick, onEquip, onRemove, onPersist, onLoad, sellValue, secret)
 end
 
 local function insertItemDefinition(itemDef)
@@ -958,9 +996,11 @@ insertItemDefinition({name="Compactifier (DUD)", itemType=TYPE_ARMOR, renderFunc
 insertItemDefinition({name="Internecion Cube", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/internecion_cube.png"), description=IC_on_TEXT, onEquip=InternecionCubeEquip, onTick=InternecionCube})
 insertItemDefinition(PGO_DEFINITION)
 insertItemDefinition(THREE_PGO_DEFINITION)
-insertItemDefinition({name="Thief's Hand", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/thiefs_hand.png"), description=THIEFS_HAND_DESCRIPTION_DORMANT, onTick=ThiefsHand})
-insertItemDefinition({name=VOID_RING_NAME, itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/ring_of_void.png"), description="Greater than what it seems.  Equipped crew can't fight or be targeted in combat."})
+insertItemDefinition({name="Thief's Hand", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/thiefs_hand.png"), description=THIEFS_HAND_DESCRIPTION_DORMANT, onEquip=ThiefsHandEquip, onTick=ThiefsHand})
+insertItemDefinition({name=VOID_RING_NAME, itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/ring_of_void.png"), description="Greater than what it seems.  Equipped crew can't fight or be targeted in combat.", onEquip=VoidRingEquip, onTick=VoidRing})
+insertItemDefinition({name=AWOKEN_THIEFS_HAND_NAME, itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/awoken_rogues_hand.png"), description=AWOKEN_THIEFS_HAND_DESCRIPTION, onTick=AwokenThiefsHand, secret=true})
 --print("numequips after", #mEquipmentGenerationTable)
+print("name table", lwl.dumpObject(mNameToItemIndexTable))
 
 ------------------------------------END ITEM DEFINITIONS----------------------------------------------------------
 -----------------------------------------WAYS TO GET ITEMS---------------------------------------------------------------
@@ -977,9 +1017,25 @@ function gex_give_all_items()
     end
 end
 
-function gex_give_random_item()
+function gex_remove_all_items()
+    if mSetupFinished then
+        resetInventory()
+    end
+    resetPersistedValues()
+end
+
+function gex_give_random_item(includeSecrets)
     if #mEquipmentGenerationTable == 0 then return end
-    return gex_give_item(math.random(1, #mEquipmentGenerationTable))
+    --todo avoid the secret stuff, then I can have my tiered up items and eat them too.
+    local genIndex = math.random(1, #mEquipmentGenerationTable)
+    if not includeSecrets then
+        while #lwl.getNewElements({genIndex}, mSecretIndices) == 0 do
+            print("Rolled a secret, rerolling", genIndex)
+            genIndex = math.random(1, #mEquipmentGenerationTable)
+        end
+    end
+    
+    return gex_give_item(genIndex)
 end
 
 --[[
@@ -1002,11 +1058,8 @@ script.on_internal_event(Defines.InternalEvents.PRE_CREATE_CHOICEBOX, function(e
     --print("itemChance", itemChance)
 end)
 script.on_game_event("START_BEACON_REAL", false, function()
-        if mSetupFinished then
-            resetInventory()
-        end
-        resetPersistedValues()
-        end)
+        gex_remove_all_items()
+    end)
 
 
 ---------------------Things with Dependencies-----------------------------------
