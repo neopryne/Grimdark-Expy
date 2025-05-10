@@ -4,7 +4,12 @@ local lwui = mods.lightweight_user_interface
 local lwcco = mods.lightweight_crew_change_observer
 local lwsil = mods.lightweight_self_indexing_list
 local lwce = mods.lightweight_crew_effects
+lwce.RequestInitialization()
+
 --local userdata_table = mods.multiverse.userdata_table
+if not lwl then
+    error("Lightweight Lua was not patched, or was patched after Grimdark Expy.  Install it properly or face undefined behavior.")
+end
 
 --[[
 TODO give different crew types different equipment slots.  Uniques and humans get all of them.  Likely elites as well.
@@ -414,99 +419,95 @@ local function tickEquipment()
 end
 
 
-if (script) then
-    script.on_internal_event(Defines.InternalEvents.ON_TICK, function()
-        if not lwl.isPaused() then
-            --[[ formula to turn ticks into 1/32 second
-            16 / speedFactor = ticks per second
-            tps * functor = 32
-            --]]
-            mScaledLocalTime = mScaledLocalTime + (Hyperspace.FPS.SpeedFactor * 16)
-            if (mScaledLocalTime > 1) then
-                tickEquipment()
-                mScaledLocalTime = 0
-            end
+script.on_internal_event(Defines.InternalEvents.ON_TICK, function()
+    if not lwl.isPaused() then
+        --[[ formula to turn ticks into 1/32 second
+        16 / speedFactor = ticks per second
+        tps * functor = 32
+        --]]
+        mScaledLocalTime = mScaledLocalTime + (Hyperspace.FPS.SpeedFactor * 16 / 10)
+        if (mScaledLocalTime > 1) then
+            tickEquipment()
+            mScaledLocalTime = 0
         end
-    end)
+    end
+    if not mScaledLocalTime == 0 then return end
+    if not mCrewChangeObserver.isInitialized() then return end
+    if not mSetupFinished then
+        --resetPersistedValues() --todo remove
+        constructEnhancementsLayout()
+    end
     
-    script.on_internal_event(Defines.InternalEvents.ON_TICK, function()
-        if not mCrewChangeObserver.isInitialized() then return end
-        if not mSetupFinished then
-            --resetPersistedValues() --todo remove
-            constructEnhancementsLayout()
-        end
-        
-        --Update crew table
-        local addedCrew = mCrewChangeObserver.getAddedCrew()
-        local removedCrew = mCrewChangeObserver.getRemovedCrew()
-        for _, crewId in ipairs(removedCrew) do
-            --print("eq crew removed id ", crewId)
-            local removedLines = {}
-            --remove existing row
-            for _, crewContainer in ipairs(mCrewListContainer.objects) do
-                --print("checking row ", crewContainer[GEX_CREW_ID])
-                if (crewContainer[GEX_CREW_ID] == crewId) then
-                    --print("found match! ")
-                    --print("there were N crew ", #mCrewListContainer.objects)
-                    table.insert(removedLines, crewContainer)
-                    mCrewListContainer.objects = lwl.getNewElements(mCrewListContainer.objects, {crewContainer})--todo this is kind of experimental
-                    --print("there are now N crew ", #mCrewListContainer.objects)
-                end
+    --Update crew table
+    local addedCrew = mCrewChangeObserver.getAddedCrew()
+    local removedCrew = mCrewChangeObserver.getRemovedCrew()
+    for _, crewId in ipairs(removedCrew) do
+        --print("eq crew removed id ", crewId)
+        local removedLines = {}
+        --remove existing row
+        for _, crewContainer in ipairs(mCrewListContainer.objects) do
+            --print("checking row ", crewContainer[GEX_CREW_ID])
+            if (crewContainer[GEX_CREW_ID] == crewId) then
+                --print("found match! ")
+                --print("there were N crew ", #mCrewListContainer.objects)
+                table.insert(removedLines, crewContainer)
+                mCrewListContainer.objects = lwl.getNewElements(mCrewListContainer.objects, {crewContainer})--todo this is kind of experimental
+                --print("there are now N crew ", #mCrewListContainer.objects)
             end
-            --remove all the items in removedLines
-            for _, line in ipairs(removedLines) do
-                for _, button in ipairs(line.objects) do
-                    if (button.item) then
-                        if (math.random() > .7) then --maybe you saved it?
-                            addToInventory(button.item)
-                        else
-                            deleteItem(button, item)
-                        end
+        end
+        --remove all the items in removedLines
+        for _, line in ipairs(removedLines) do
+            for _, button in ipairs(line.objects) do
+                if (button.item) then
+                    if (math.random() > .7) then --maybe you saved it?
+                        addToInventory(button.item)
+                    else
+                        deleteItem(button, item)
                     end
                 end
             end
         end
-        for _, crewId in ipairs(addedCrew) do
-            local crewmem = lwl.getCrewById(crewId)
-            --print("eq crew added ", crewId, crewmem:GetName())
-            mCrewListContainer.addObject(buildCrewRow(crewmem))
+    end
+    for _, crewId in ipairs(addedCrew) do
+        local crewmem = lwl.getCrewById(crewId)
+        --print("eq crew added ", crewId, crewmem:GetName())
+        mCrewListContainer.addObject(buildCrewRow(crewmem))
+    end
+    
+    if not mSetupFinished then
+        loadPersistedEquipment()
+        mSetupFinished = true
+    end
+    --print("equipment saving last seen state")
+    mCrewChangeObserver.saveLastSeenState()
+end)
+
+script.on_render_event(Defines.RenderEvents.TABBED_WINDOW, function()
+end, function(tabName)
+    if not mSetupFinished then return end
+    --might need to put this in the reset category.
+    --print("tab name "..tabName)
+    if tabName == ENHANCEMENTS_TAB_NAME then
+        --description rendering, last hovered item will persist until window refreshed.
+        local buttonContents = nil
+        if (lwui.mHoveredButton ~= nil) then
+            buttonContents = lwui.mHoveredButton.item
+        end
+        if (lwui.mClickedButton ~= nil) then
+            buttonContents = lwui.mClickedButton.item
+        end
+        if (buttonContents) then
+            mDescriptionHeader.text = buttonContents.name
+            mDescriptionTextBox.text = "Type: "..buttonContents.itemType.."\n"..buttonContents.description.."\nSell Value: "..buttonContents.sellValue.."~"
         end
         
-        if not mSetupFinished then
-            loadPersistedEquipment()
-            mSetupFinished = true
+        if not (mTabbedWindow == ENHANCEMENTS_TAB_NAME) then
+            mDescriptionHeader.text = NO_ITEM_SELECTED_TEXT
+            mDescriptionTextBox.text = ""
         end
-        --print("equipment saving last seen state")
-        mCrewChangeObserver.saveLastSeenState()
-    end)
-    
-    script.on_render_event(Defines.RenderEvents.TABBED_WINDOW, function()
-    end, function(tabName)
-        if not mSetupFinished then return end
-        --might need to put this in the reset category.
-        --print("tab name "..tabName)
-        if tabName == ENHANCEMENTS_TAB_NAME then
-            --description rendering, last hovered item will persist until window refreshed.
-            local buttonContents = nil
-            if (lwui.mHoveredButton ~= nil) then
-                buttonContents = lwui.mHoveredButton.item
-            end
-            if (lwui.mClickedButton ~= nil) then
-                buttonContents = lwui.mClickedButton.item
-            end
-            if (buttonContents) then
-                mDescriptionHeader.text = buttonContents.name
-                mDescriptionTextBox.text = "Type: "..buttonContents.itemType.."\n"..buttonContents.description.."\nSell Value: "..buttonContents.sellValue.."~"
-            end
-            
-            if not (mTabbedWindow == ENHANCEMENTS_TAB_NAME) then
-                mDescriptionHeader.text = NO_ITEM_SELECTED_TEXT
-                mDescriptionTextBox.text = ""
-            end
-        end
-        mTabbedWindow = tabName
-    end)
-end
+    end
+    mTabbedWindow = tabName
+end)
 ------------------------------------END REALTIME EVENTS----------------------------------------------------------
 ------------------------------------ITEM DEFINITIONS----------------------------------------------------------
 --Only the player can use items.
@@ -557,14 +558,14 @@ local function ChicagoTypewriter(item, crewmem)
     item.manningWeapons = manningWeapons
 end
 
-local function ChicagoTypewriterUnequip(item, crewmem)
+local function ChicagoTypewriterRemove(item, crewmem)
     if item.manningWeapons then
         Hyperspace.ships.player.weaponSystem:UpgradeSystem(-1)
     end
 end
 -------------------BALLANCEATOR------------------
 local function Ballanceator(item, crewmem)
-    local dpt = .085
+    local dpt = .85
     if (crewmem:GetIntegerHealth() > crewmem:GetMaxHealth() / 2) then
         crewmem:DirectModifyHealth(-dpt)
     else
@@ -577,7 +578,7 @@ local function HellionHalberd(item, crewmem)
         --foes_at_point = lwl.get_ship_crew_point(ownshipManager, foeShipManager, crewmem.x, crewmem.y) --coords are relative to the first manager.
         --foes_at_point = lwl.getFoesAtPoint(crewmem, crewmem.x, crewmem.y) --this is actually harder to implement as it involves converting points in mainspace to one of the ships.
         for _,foe in ipairs(lwl.getFoesAtSelf(crewmem)) do
-            lwce.applyBleed(foe, 2.1)--per tick  todo sometimes doesn't work.  also statuses sometimes don't teleport right.  Applying to enemy crew seems to not work now.
+            lwce.applyBleed(foe, 21)--per tick  todo sometimes doesn't work.  also statuses sometimes don't teleport right.  Applying to enemy crew seems to not work now.
         end
     end
 end
@@ -627,7 +628,7 @@ local function OmelasGeneratorEquip(item, crewmem) --mAYBE MAKE THIS CURSED.  Al
 end
 
 local function OmelasGenerator(item, crewmem)
-    lwce.applyCorruption(crewmem, .0006)
+    lwce.applyCorruption(crewmem, .006)
 end
 
 local function OmelasGeneratorRemove(item, crewmem)
@@ -637,11 +638,11 @@ end
 -------------------Ferrogenic Exsanguinator------------------
 local function FerrogenicExsanguinator(item, crewmem)
     --If crew repairing a system, apply bleed and repair system more.
-    if crewmem:RepairingSystem() then
+    if crewmem:RepairingSystem() and not crewmem:RepairingFire() then
         local currentShipManager = Hyperspace.ships(crewmem.currentShipId)
         local systemId = crewmem.iManningId
         local system = currentShipManager:GetSystem(systemId)
-        system:PartialRepair(.95, false)
+        system:PartialRepair(12.5, false)
         lwce.applyBleed(crewmem, 3.2)
     end
 end
@@ -685,6 +686,144 @@ end
 local function HolySymbolRemove(item, crewmem)
     lwce.addResist(crewmem, lwce.KEY_CORRUPTION, -.9)
 end
+-------------------Interfangilator------------------
+-- This is actually way more complex because it requires tracking which enemy ship you are facing.
+-- Reduces it by 1
+local function InterfangilatorEquip(item, crewmem)--[[  TODO FIX when a new ship is jumping in.
+    print("skill level", crewmem:GetSkillLevel(0))
+    print("skill modifier", crewmem:GetSkillModifier(0))
+    print("skill progress", crewmem:GetSkillProgress(0))
+    print("skill from system", Hyperspace.CrewMember.GetSkillFromSystem(0))
+    crewmem:MasterSkill(0)
+    
+    print("skill level", crewmem:GetSkillLevel(0))
+    print("skill modifier", crewmem:GetSkillModifier(0))
+    print("skill progress", crewmem:GetSkillProgress(0))
+    print("skill from system", Hyperspace.CrewMember.GetSkillFromSystem(0))--]]
+end
+
+local function InterfangilatorApplyEffect(item, crewmem, value) --mostly checks crewmem values
+    if crewmem.iManningId >= 0 and Hyperspace.ships.enemy and (crewmem.currentShipId == crewmem.iShipId) then
+        local system = Hyperspace.ships.enemy:GetSystem(crewmem.iManningId)
+        print("if applying", crewmem.iManningId, "system is", system, value)
+        if system then
+            local beforePower = system:GetPowerCap()
+            print("before power", beforePower)
+            system:UpgradeSystem(-value)
+            item.storedValue = beforePower - system:GetPowerCap()
+            --should also store damage status of the removed bars. may be hard.
+        end
+    end
+end
+
+local function InterfangilatorRemoveEffect(item, crewmem, value) --todo make this use item.system  --mostly checks item values
+    if item.systemId and item.systemId >= 0 and Hyperspace.ships.enemy and (item.shipId == crewmem.iShipId) then
+        local system = Hyperspace.ships.enemy:GetSystem(item.systemId)
+        print("if removed", item.systemId, "system is", system, value)
+        if system then
+            system:UpgradeSystem(value)
+            if system:CompletelyDestroyed() then
+                system:SetDamage(0) --repair partial 100Xvalue
+            end
+        end
+    end
+end
+
+local function Interfangilator(item, crewmem)
+    if item.jumping and not Hyperspace.ships(0).bJumping then
+        item.ready = true
+        item.systemId = nil
+    end
+    item.jumping = Hyperspace.ships(0).bJumping
+    
+    if item.ready or ((item.system ~= crewmem.currentSystem) and (item.shipId == crewmem.iShipId)) then
+        print("IFID is now ", crewmem.iManningId)
+        InterfangilatorRemoveEffect(item, crewmem, 1)
+        InterfangilatorApplyEffect(item, crewmem, 1)
+        item.ready = false
+    end
+    item.systemId = crewmem.iManningId
+    item.system = crewmem.currentSystem
+    item.shipId = crewmem.currentShipId
+end
+
+local function InterfangilatorRemove(item, crewmem)
+    InterfangilatorRemoveEffect(item, crewmem, item.storedValue)
+end
+-------------------Custom Interfangilator------------------
+-- Reduces it by the crew's skill level in that system.
+local function CustomInterfangilatorLevel(item, crewmem)
+    return crewmem:GetSkillLevel(Hyperspace.CrewMember.GetSkillFromSystem(crewmem.iManningId)) - 1
+end
+
+local function CustomInterfangilator(item, crewmem)
+    if item.jumping and not Hyperspace.ships(0).bJumping then
+        item.ready = true
+    end
+    item.jumping = Hyperspace.ships(0).bJumping
+    
+    if item.ready or ((item.system ~= crewmem.currentSystem) and (item.shipId == crewmem.iShipId)) then
+        print("CIFID is now ", crewmem.iManningId)
+        --todo misbehaves if crew skilled up while active, but that happens like twice.
+        item.storedValue = lwl.setIfNil(item.storedValue, CustomInterfangilatorLevel(item, crewmem))
+        InterfangilatorRemoveEffect(item, crewmem, item.storedValue)
+        item.storedValue = CustomInterfangilatorLevel(item, crewmem)
+        InterfangilatorApplyEffect(item, crewmem, item.storedValue)
+        item.ready = false
+        item.systemId = crewmem.iManningId
+    end
+    item.systemId = crewmem.iManningId
+    item.system = crewmem.currentSystem
+    item.shipId = crewmem.currentShipId
+end
+
+local function CustomInterfangilatorRemove(item, crewmem)
+    InterfangilatorRemoveEffect(item, crewmem, item.storedValue)
+end
+-------------------Compactifier------------------
+local function CompactifierEquip(item, crewmem) --needs stat boost 1.20
+    --item.wasNoslot = 
+    --local powerManager = Hyperspace.PowerManager.GetPowerManager(0)
+    --powerManager.currentPower.second = powerManager.currentPower.second + 4
+end
+
+local function CompactifierRemove(item, crewmem)
+    if not item.wasNoslot then
+        --crewmem
+    end
+end
+-------------------INTERNECION CUBE------------------
+local function InternecionCubeEquip(item, crewmem)
+    item.value = 0
+end
+
+local MURDERBOT_LIST = {"NANOBOT_DEFENSE_SYSTEM", "LOCKED_NANOBOT_DEFENSE_SYSTEM", "IZD_NANOBOT_DEFENSE_SYSTEM", "HIDDEN IZD_NANOBOT_DEFENSE_SYSTEM", "FM_NO_IZD_MURDERBOTS", "DECREPIT_MURDERBOTS", "ANCIENT_MURDERBOTS", "ROYAL_MURDERBOTS", "AEA_NECRO_MURDERBOTS"}
+local IC_on_TEXT = "Cute and lethal, this boodthirsty being will carve up your foes and sometimes you (in a good way). Damages all enemies in the same room when fighting. If crew is below full health, periodically stun and heal them."
+local function InternecionCube(item, crewmem)
+    local murderMultiplier = 1
+    for _,murderAugName in ipairs(MURDERBOT_LIST) do
+        murderMultiplier = murderMultiplier + Hyperspace.ships.player:HasAugmentation(murderAugName)
+    end
+    if murderMultiplier > 1 then
+        item.description = IC_on_TEXT.." Boosted [X][X] "..murderMultiplier.." by MURDER!"
+    else
+        item.description = IC_on_TEXT
+    end
+    
+    item.value = item.value + (.24 / murderMultiplier)
+    if item.value > 100 then
+        item.value = 0
+        if crewmem.health.first < crewmem.health.second then
+            crewmem.fStunTime = crewmem.fStunTime + 2.5 + murderMultiplier
+            crewmem:DirectModifyHealth(28 * murderMultiplier)
+        end
+    end
+
+    if crewmem.bFighting then
+        lwl.damageEnemyCrewInSameRoom(crewmem, .07 * murderMultiplier, 0) --lwl might have issues if crew tag along after a jump todo fix?
+        --todo damage everyone, increase heal.
+    end
+end
 --[[
 todo persist status effects on crew
 Torpor Projector
@@ -692,17 +831,14 @@ Noted, so teleporting really messes with this.  Furthermore why are the effects 
 Determination -- Getting hit charges your abilities.
 Inflatable muscles -- while about 1/3 health, extra damage
 Medbot Injector -- Health recharge passive
-Orgainc Impulse Grafts -- Armor: +5 hp, immunity to bleed, 60% stun resist.
 I guess I need status definitions so people know what they do.  Bleed is easy, the others less so.
 
 Interface Scrambler -- Removes manning bonus from all enemy systems and prevents them from being manned.
 Purple Thang -- censored, inflicts confusion.
-omalas dynamo: crew provides 4 bars of green power to your ship, but slowly stacks corruption until it kills them.  This is not removed upon cloning.
-    Actually maybe I make it so if you die with corruption, you die for real.  Or like, corruption% chance you don't revive.  5 corruption is already kind of a lot of damage.
+    Or like, corruption% chance you don't revive.  5 corruption is already kind of a lot of damage.
 Holy Symbol: lots of icons, 90% corruption resist [miku, hand grenade, (), hl2 logo, random objects]
 Scrap Harm: Scrap gain increased by 10%, but gaining scrap makes crew bleed and go crazy. (automate)
 A fun thing might look at how many effects are on a given crew.  It should be easy to get the list of effects on a given crew.  PRetty sure it is as written.
-Compactifier -- armor, Equipped crew is noslot.
   30% system resist to the room you're in
 Galpegar
 Noctus
@@ -711,6 +847,10 @@ The Thunderskin  --Crew cannot fight and gains 100 (double?) health. When in a r
 Sthenic Venom
 Item that get stronger the more items you sell.
 --todo item onLoad onPersist methods for things that need to save stuff
+Blood is Mine, something else I forgot for art assets
+FTF Discette
+A collection of the latest tracks from backwater bombshell Futanari Titwhore Fiasco
+
 
 --Crew name list
 Swankerdino
@@ -739,7 +879,7 @@ print("numequips before (should be 0)", #mEquipmentGenerationTable)
 --Only add to the bottom, changing the order is breaking.
 insertItemDefinition({name="Shredder Cuffs", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/SpikedCuffs.png"), description="Looking sharp.  Extra damage in melee.", onTick=ShredderCuffs, sellValue=3})
 insertItemDefinition({name="Seal Head", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/SealHead.png"), description="The headbutts it enables are an effective counter to the ridicule you might encounter for wearing such odd headgear.", onTick=SealHead})
-insertItemDefinition({name="Chicago Typewriter", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/ChicagoTypewriter.png"), description="Lots of oomph in these keystrokes.  Adds a bar when manning weapons.", onTick=ChicagoTypewriter, onRemove=ChicagoTypewriterUnequip})
+insertItemDefinition({name="Chicago Typewriter", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/ChicagoTypewriter.png"), description="Lots of oomph in these keystrokes.  Adds a bar when manning weapons.", onTick=ChicagoTypewriter, onRemove=ChicagoTypewriterRemove})
 insertItemDefinition({name="Ballancator", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/Ballancator.png"), description="As all things should be.  Strives to keep its wearer at exactly half health.", onTick=Ballanceator})
 insertItemDefinition({name="Hellion Halberd", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/halberd.png"), description="A vicious weapon that leaves its victems with gaping wounds that bleed profusely.", onTick=HellionHalberd})
 insertItemDefinition({name="Peppy Bismol (DUD)", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/peppy_bismol.png"), description="'With Peppy Bismol, nothing will be able to keep you down!'  Increases active ability charge rate.", onTick=PeppyBismol})
@@ -751,6 +891,10 @@ insertItemDefinition({name="Ferrogenic Exsanguinator", itemType=TYPE_TOOL, rende
 insertItemDefinition({name="Egg", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/egg.png"), description="Gains 3 sell value each jump.", onTick=Egg, sellValue=0})
 insertItemDefinition({name="Myocardial Overcharger (DUD)", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/brain_gang.png"), description="Grows in power with each item sold.", onTick=MyocardialOvercharger, onEquip=MyocardialOverchargerEquip, onRemove=MyocardialOverchargerRemove})
 insertItemDefinition({name="Holy Symbol", itemType=TYPE_WEAPON, renderFunction=HolySymbolRender(), description="Renders its wearer nigh impervious to corruption.", onEquip=HolySymbolEquip, onRemove=HolySymbolRemove, sellValue=10})
+insertItemDefinition({name="Interfangilator", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/detector.png"), description="Attaches to the frequency signatures of matching enemy systems and inhibits them, reducing them by a bar.", onEquip=InterfangilatorEquip, onTick=Interfangilator, onRemove=InterfangilatorRemove})
+insertItemDefinition({name="Custom Interfangilator", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/custom_detector.png"), description="Their expertise becomes their sword, and enemy systems fall. An aftermarket model which scales based on the crew's skill level with the current system.", onEquip=InterfangilatorEquip, onTick=CustomInterfangilator, onRemove=CustomInterfangilatorRemove})
+insertItemDefinition({name="Compactifier (DUD)", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/decrepit paper.png"), description="Nearly illegible documents stating that this crew 'Doesn't count'.", onEquip=CompactifierEquip, onRemove=CompactifierRemove})
+insertItemDefinition({name="Internecion Cube", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/internecion_cube.png"), description=IC_on_TEXT, onEquip=InternecionCubeEquip, onTick=InternecionCube})
 print("numequips after", #mEquipmentGenerationTable)
 
 ------------------------------------END ITEM DEFINITIONS----------------------------------------------------------
