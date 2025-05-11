@@ -4,9 +4,11 @@ local lwui = mods.lightweight_user_interface
 local lwcco = mods.lightweight_crew_change_observer
 local lwsil = mods.lightweight_self_indexing_list
 local lwce = mods.lightweight_crew_effects
+local gecs = mods.gex_equip_crew_slots
 lwce.RequestInitialization()
 
---local userdata_table = mods.multiverse.userdata_table
+--As library, needs to reject things with duplicate names, pop error. lib in lwl, GEXPy uses lib and adds the items.
+--I probably need to hash out custom persist stuff first.
 if not lwl then
     error("Lightweight Lua was not patched, or was patched after Grimdark Expy.  Install it properly or face undefined behavior.")
 end
@@ -27,13 +29,13 @@ local EQUIPMENT_SUBTAB_INDEX = 1
 local TYPE_WEAPON = "Weapon"
 local TYPE_ARMOR = "Armor"
 local TYPE_TOOL = "Tool"
+local TYPE_NONE = "None"
+local TYPE_ANY = "Any"
+local TYPE_SPACER = "Spacer"
 local EQUIPMENT_ICON_SIZE = 30
 local GEX_CREW_ID = "GEX_crewId"
 --todo a button that makes items for testing
 
-local WEAPON_BUTTON_SUFFIX = "_weapon_button"
-local ARMOR_BUTTON_SUFFIX = "_armor_button"
-local TOOL_BUTTON_SUFFIX = "_tool_button"
 local INVENTORY_BUTTON_PREFIX = "inventory_button_"
 local NO_ITEM_SELECTED_TEXT = "--- None Selected ---"
 
@@ -110,21 +112,11 @@ local function inventoryFilterFunctionAny(item)
     return true
 end
 
-local function inventoryFilterFunctionWeapon(item)
-    return (item ~= nil and item.itemType == TYPE_WEAPON)
-end
-
-local function inventoryFilterFunctionArmor(item)
-    return (item ~= nil and item.itemType == TYPE_ARMOR)
-end
-
-local function inventoryFilterFunctionTool(item)
-    return (item ~= nil and item.itemType == TYPE_TOOL)
-end
-
-local function inventoryFilterFunctionEquipment(item)
-    return inventoryFilterFunctionWeapon(item) or 
-            inventoryFilterFunctionArmor(item) or inventoryFilterFunctionTool(item)
+local function generateStandardFilterFunction(itemType)
+   return function(item)
+       print("checking ", item.name, item.itemType, "against", itemType)
+       return (item ~= nil and item.itemType == itemType)
+   end
 end
 
 ------------------------------------END INVENTORY FILTER FUNCTIONS----------------------------------------------------------
@@ -164,16 +156,6 @@ local function resetInventory()
     mCrewListContainer.objects = {} --todo this removes starting crew, find a better way to do whatever this is.
 end
 
-local function addToInventory(item)
-    local oldSlotValue = item.assigned_slot
-    for _, iButton in ipairs(mInventoryButtons) do
-        if (iButton.addItem(item)) then --implicitly calls buttonAddInventory
-            return true
-        end
-    end
-    return false
-end
-
 local function itemTryUnequipPrevious(item)
     if item.assigned_slot ~= nil and item.assigned_slot >= 0 then
         --print("added from crew ", item.assigned_slot)
@@ -186,20 +168,36 @@ local function itemTryUnequipPrevious(item)
     end
 end
 
+--The first argument is unused, but needs to be there
 local function deleteItem(button, item)
     itemTryUnequipPrevious(item)
     mItemList:remove(item._index)
-    button.item = nil
+    if button then
+        button.item = nil
+    end
     item.assigned_slot = -2 --destroyed
     persistEquipment()
 end
 
+--The first argument is unused, but needs to be there
 local function trashItem(button, item) --From scrap it came, and to scrap it can return.
     Hyperspace.ships(0):ModifyScrapCount(item.sellValue, false)
     Hyperspace.Sounds:PlaySoundMix("buy", -1, false)
     mItemsSold = mItemsSold + 1
     mItemsSoldValue = mItemsSoldValue + item.sellValue
     deleteItem(button, item)
+end
+
+--Does not remove item from previous location
+local function addToInventory(item)
+    local oldSlotValue = item.assigned_slot
+    for _, iButton in ipairs(mInventoryButtons) do
+        if (iButton.addItem(item)) then --implicitly calls buttonAddInventory
+            return true
+        end
+    end
+    trashItem(nil, item)
+    return false
 end
 
 local function buttonAddInventory(button, item)
@@ -210,25 +208,26 @@ end
 
 local function getCrewButton(crewId, itemType)
     for _, crewContainer in ipairs(mCrewListContainer.objects) do
-        --print("checking row ", crewContainer[GEX_CREW_ID])
+        print("checking row ", crewContainer[GEX_CREW_ID])
         if (crewContainer[GEX_CREW_ID] == crewId) then
-            --print("crew found, adding ", item.name)
+            print("crew found, adding ", itemType)
             for _, iButton in ipairs(crewContainer.objects) do
-                --print("checking for buttons ", iButton.className)
+                print("checking for buttons ", iButton.className)
                 if (iButton.className == "inventoryButton") then--todo expose these values
-                    if (iButton.itemType == itemType) then
+                    if (iButton.allowedItemsFunction(itemType)) then
                         return iButton
                     end
                 end
             end
         end
     end
+    --error("GEX Could not find crew button!")
 end
 
 local function addToCrew(item, crewId) --find the button to add it to and call that.
     --print("addToCrew")
     local button = getCrewButton(crewId, item.itemType)
-    return button.addItem(item)
+    return button.addItem(item) --todo these two are failing with nil stuff
 end
 
 local function getEquippedItem(crewId, itemType)
@@ -285,6 +284,7 @@ persistEquipment = function()
         local equipment = mItemList:get(i)
         if (equipment.generating_index == nil) or (equipment.assigned_slot == nil) then
             print(TAG, "ERROR: Could not persist "..equipment.name..": incomplete values.", equipment.generating_index, equipment.assigned_slot)
+            --deleteItem(nil, equipment) breaks badly
             --print(equipment.generating_index, equipment.assigned_slot)
         else
             successes = successes + 1
@@ -332,9 +332,9 @@ local function buildInventoryContainer()
             {}, true, false, 7)
         for j=1,inventoryColumns do
             local buttonNum = ((i - 1) * inventoryRows) + j
-            local button = lwui.buildInventoryButton(WEAPON_BUTTON_SUFFIX..buttonNum, 0, 0, mCrewLineHeight, mCrewLineHeight,
+            local button = lwui.buildInventoryButton(buttonNum, 0, 0, mCrewLineHeight, mCrewLineHeight,
                     tabOneStandardVisibility, lwui.inventoryButtonDefault,
-                    inventoryFilterFunctionEquipment, buttonAddInventory)
+                    inventoryFilterFunctionAny, buttonAddInventory)
             horizContainer.addObject(button)
             table.insert(mInventoryButtons, button)
         end
@@ -343,33 +343,53 @@ local function buildInventoryContainer()
     return verticalContainer
 end 
 
---todo toggle active buttons based on crew type.
+local function buildIButton(filterFunction, renderFunction, itemTypes, crewId)
+    local standardButton = lwui.buildInventoryButton("", 0, 0, mCrewLineHeight, mCrewLineHeight,
+        tabOneStandardVisibility, renderFunction, filterFunction, buttonAddToCrew)
+    standardButton[GEX_CREW_ID] = crewId
+    return standardButton
+end
+
+local function buildSingleButton(crewmem, buttonType)
+    local object
+    local crewId = crewmem.extend.selfId
+    if buttonType == TYPE_NONE then
+        --None, return a red square item like the crew standin.
+        object = lwui.buildObject(0, 0, mCrewLineHeight, mCrewLineHeight, tabOneStandardVisibility,
+            lwui.inventoryButtonDefaultDisabled)
+    elseif buttonType == TYPE_WEAPON or buttonType == TYPE_ARMOR or buttonType == TYPE_TOOL then
+        object = buildIButton(generateStandardFilterFunction(buttonType),
+            lwui.inventoryButtonDefault, buttonType, crewId)
+        --todo if limit
+    elseif buttonType == TYPE_ANY then
+        object = buildIButton(inventoryFilterFunctionAny, lwui.inventoryButtonFadedGayDefault, buttonType, crewId)
+        object[GEX_CREW_ID] = crewId
+    elseif buttonType == TYPE_SPACER then
+        object = lwui.buildObject(0, 0, mCrewLineHeight/2 - mCrewLinePadding, mCrewLineHeight, tabOneStandardVisibility, NOOP)
+    else
+        error("GEX Unknown button type", buttonType)
+    end
+    return object
+end
+
 local function buildCrewRow(crewmem)
     local anim = lwui.buildObject(0, 0, mCrewLineHeight, mCrewLineHeight, tabOneStandardVisibility, lwui.solidRectRenderFunction(Graphics.GL_Color(.8, .2, .2, .3)))
     local nameText = lwui.buildFixedTextBox(0, 0, mCrewLineNameWidth, mCrewLineHeight, tabOneStandardVisibility, NOOP, mCrewLineTextSize)
     nameText.text = crewmem:GetName()
-    local weaponButton = lwui.buildInventoryButton(crewmem.extend.selfId..WEAPON_BUTTON_SUFFIX, 0, 0, mCrewLineHeight, mCrewLineHeight,
-        tabOneStandardVisibility, lwui.inventoryButtonDefault, inventoryFilterFunctionWeapon, buttonAddToCrew)
-    local armorButton = lwui.buildInventoryButton(crewmem.extend.selfId..ARMOR_BUTTON_SUFFIX, 0, 0, mCrewLineHeight, mCrewLineHeight,
-        tabOneStandardVisibility, lwui.inventoryButtonDefault, inventoryFilterFunctionArmor, buttonAddToCrew)
-    local toolButton = lwui.buildInventoryButton(crewmem.extend.selfId..TOOL_BUTTON_SUFFIX, 0, 0, mCrewLineHeight, mCrewLineHeight,
-        tabOneStandardVisibility, lwui.inventoryButtonDefault, inventoryFilterFunctionTool, buttonAddToCrew)
-    weaponButton.itemType = TYPE_WEAPON
-    armorButton.itemType = TYPE_ARMOR
-    toolButton.itemType = TYPE_TOOL
+    
     local horizContainer = lwui.buildHorizontalContainer(3, 0, 100, mCrewLineHeight, tabOneStandardVisibility, NOOP,
-        {anim, nameText, weaponButton, armorButton, toolButton}, true, false, mCrewLinePadding)
-    --kind of dirty to apply it to all of these but it's not that bad.
+        {anim, nameText}, true, false, mCrewLinePadding)
     horizContainer[GEX_CREW_ID] = crewmem.extend.selfId
-    weaponButton[GEX_CREW_ID] = crewmem.extend.selfId
-    armorButton[GEX_CREW_ID] = crewmem.extend.selfId
-    toolButton[GEX_CREW_ID] = crewmem.extend.selfId
+    
+    local definition = gecs.getCrewSlots(crewmem.extend:GetDefinition().race)
+    for _,defType in ipairs(definition) do--todo if limit
+        horizContainer.addObject(buildSingleButton(crewmem, defType))
+    end
     return horizContainer
 end
 
 local function buildCrewEquipmentScrollBar()
-    return lwui.buildVerticalContainer(0, 0, 300, 20, tabOneStandardVisibility, NOOP,
-        {nameText, weaponButton, armorButton, toolButton}, false, true, mCrewRowPadding)
+    return lwui.buildVerticalContainer(0, 0, 300, 20, tabOneStandardVisibility, NOOP, {}, false, true, mCrewRowPadding)
 end
 
 local function constructEnhancementsLayout()
@@ -662,7 +682,22 @@ local function FerrogenicExsanguinator(item, crewmem)
         lwce.applyBleed(crewmem, 3.2)
     end
 end
--------------------Egg------------------
+-------------------Egg------------------  --Any internal status, beyond just is this thing equipped, needs a custom persist/load to handle that.
+--Part of this is that all items are created from scratch, and individual ids are not saved.
+--Items create a persist id upon creation
+--Ok, so I need to keep a list of items sorted by kind.  And then ids and internal states for all of them.
+--On load, when you're creating the items of those types, said effects can be applied along with the index of the item.
+--Ok actually storing index is totally state, and I should be able to do this along side that.
+--Because items with the same type and index are functionally identical.
+--Unless I do actually implement the all-accepting slots for some races, and then also make the slot something is in matter.
+local function loadEgg()
+    
+end
+
+local function persistEgg()
+    
+end
+
 local function Egg(item, crewmem)
     if item.jumping and not Hyperspace.ships(0).bJumping then
         item.sellValue = item.sellValue + 3
@@ -696,12 +731,12 @@ local function HolySymbolRender()
 end
 
 local function HolySymbolEquip(item, crewmem)
-    print("Holy symbol equipped!")
+    --print("Holy symbol equipped!")
     lwce.addResist(crewmem, lwce.KEY_CORRUPTION, .9)
 end
 
 local function HolySymbolRemove(item, crewmem)
-    print("Holy symbol removed!")
+    --print("Holy symbol removed!")
     lwce.addResist(crewmem, lwce.KEY_CORRUPTION, -.9)
 end
 -------------------Interfangilator------------------
@@ -928,7 +963,7 @@ I guess I need status definitions so people know what they do.  Bleed is easy, t
 Interface Scrambler -- Removes manning bonus from all enemy systems and prevents them from being manned.
 Purple Thang -- censored, inflicts confusion.
     Or like, corruption% chance you don't revive.  5 corruption is already kind of a lot of damage.
-Holy Symbol: lots of icons, 90% corruption resist [miku, hand grenade, (), hl2 logo, random objects]
+Holy Symbol: [hand grenade, (), hl2 logo, random objects]
 Scrap Harm: Scrap gain increased by 10%, but gaining scrap makes crew bleed and go crazy. (automate)
 A fun thing might look at how many effects are on a given crew.  It should be easy to get the list of effects on a given crew.  PRetty sure it is as written.
   30% system resist to the room you're in
@@ -972,10 +1007,10 @@ end
 
 local function insertItemDefinition(itemDef)
     table.insert(mEquipmentGenerationTable, buildBlueprintFromDefinition(itemDef))
-    --print("Adding ", itemDef.name, " with index", #mEquipmentGenerationTable)
+    --print("Adding ", itemDef.name, " with index", #mEquipmentGenerationTable) 
 end
 --print("numequips before (should be 0)", #mEquipmentGenerationTable)
---Only add to the bottom, changing the order is breaking.
+--Only add to the bottom, changing the order is breaking. --45 c cvgbhbhyh bbb
 insertItemDefinition({name="Shredder Cuffs", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/SpikedCuffs.png"), description="Looking sharp.  Extra damage in melee.", onTick=ShredderCuffs, sellValue=3})
 insertItemDefinition({name="Seal Head", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/SealHead.png"), description="The headbutts it enables are an effective counter to the ridicule you might encounter for wearing such odd headgear.", onTick=SealHead})
 insertItemDefinition({name="Chicago Typewriter", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/ChicagoTypewriter.png"), description="Lots of oomph in these keystrokes.  Adds a bar when manning weapons.", onTick=ChicagoTypewriter, onRemove=ChicagoTypewriterRemove})
@@ -984,7 +1019,7 @@ insertItemDefinition({name="Hellion Halberd", itemType=TYPE_WEAPON, renderFuncti
 insertItemDefinition({name="Peppy Bismol (DUD)", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/peppy_bismol.png"), description="'With Peppy Bismol, nothing will be able to keep you down!'  Increases active ability charge rate.", onTick=PeppyBismol})
 insertItemDefinition({name="Medkit (DUD)", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/medkit.png"), description="Packed full of what whales you.  +15 max health.", onEquip=MedkitEquip, onRemove=MedkitRemove})
 insertItemDefinition({name="Orgainc Impulse Grafts (DUD)", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/graft_armor.png"), description="Quickly rights abnormal status conditions. +5 max health, bleed immunity, stun resist.", onTick=GraftArmor, onEquip=GraftArmorEquip, onRemove=GraftArmorRemove})
-insertItemDefinition({name="Testing Status Tool", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/Untitled.png"), description="ALL OF THEM!!!", onTick=statusTest, onEquip=statusTestEquip, onRemove=statusTestRemove, sellValue=15})
+insertItemDefinition({name="Testing Status Tool", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/Untitled.png"), description="ALL OF THEM!!!  A complicated-looking device that inflicts its wearer with all manner of ill effects.  Thankfully, someone else wants it more than you do.", onTick=statusTest, onEquip=statusTestEquip, onRemove=statusTestRemove, sellValue=15})
 insertItemDefinition({name="Omelas Generator", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/leaves_of_good_fortune.png"), description="Power, at any cost.  Equiped crew adds four ship power but slowly stacks corruption.", onTick=OmelasGenerator, onEquip=OmelasGeneratorEquip, onRemove=OmelasGeneratorRemove})
 insertItemDefinition({name="Ferrogenic Exsanguinator", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/grafted.png"), description="'The machine god requires a sacrifice of blood, and I give it gladly.'  Biomechanical tendrils wrap around this crew, extracting their life force to hasten repairs.", onTick=FerrogenicExsanguinator})
 insertItemDefinition({name="Egg", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/egg.png"), description="Gains 3 sell value each jump.", onTick=Egg, sellValue=0})

@@ -2,17 +2,20 @@
   <title><![CDATA[ Grimdark Expy]]></title>
   <threadUrl><![CDATA[https://github.com/neopryne/Grimdark-Expy/tree/main]]></threadUrl>
   <author><![CDATA[ Limrix ]]></author>
-  <version><![CDATA[ 0.6 ]]></version>
+  <version><![CDATA[ 0.7 ]]></version>
   <description>
 <![CDATA[
-In the far reaches of the multiverse, sometimes you just want a really cool weapon.
+# Grimdark-Expy
+Definitely NOT one of those other ones
+
+## Crew Equipment
+Add some pizzaz with over 20 items to play with in a new menu tab.
 
 Thanks to Nai for help with equipment icons!
 
-Requirements:
-	VertexUtils
-	Brightness Particles 1.4+
-	Lightweight Lua 0.7+
+### Requirements:
+[Brightness Particles](https://ftlmultiverse.boards.net/thread/109/library-brightness-particles) 1.4+
+[Lightweight Lua](https://github.com/neopryne/lightweight-lua) 0.8+
 ]]>
   </description>
 </metadata>
