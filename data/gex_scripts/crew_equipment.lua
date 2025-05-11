@@ -206,15 +206,39 @@ local function buttonAddInventory(button, item)
     persistEquipment()
 end
 
-local function getCrewButton(crewId, itemType)
+--returns the first found button with the given name item
+local function getCrewButtonWithItem(crewId, itemName)
+    for _, crewContainer in ipairs(mCrewListContainer.objects) do
+        --print("checking row ", crewContainer[GEX_CREW_ID])
+        if (crewContainer[GEX_CREW_ID] == crewId) then
+            --print("crew found, looking for button that can hold", item.itemType)
+            for _, iButton in ipairs(crewContainer.objects) do
+                --print("checking for buttons ", iButton.className)
+                if (iButton.className == "inventoryButton") then--todo expose these values
+                    if (iButton.item and iButton.item.name == itemName) then
+                        return iButton
+                    end
+                end
+            end
+        end
+    end
+end
+
+local function crewHasItem(crewId, itemName)
+    local button = getCrewButtonWithItem(crewId, itemType)
+    return (button ~= nil)
+end
+
+--todo this has issues, and solving them will likely restore stability to a good place.
+local function getCrewButton(crewId, item)
     for _, crewContainer in ipairs(mCrewListContainer.objects) do
         print("checking row ", crewContainer[GEX_CREW_ID])
         if (crewContainer[GEX_CREW_ID] == crewId) then
-            print("crew found, adding ", itemType)
+            print("crew found, looking for button that can hold", item.itemType)
             for _, iButton in ipairs(crewContainer.objects) do
                 print("checking for buttons ", iButton.className)
                 if (iButton.className == "inventoryButton") then--todo expose these values
-                    if (iButton.allowedItemsFunction(itemType)) then
+                    if (iButton.allowedItemsFunction(item)) then
                         return iButton
                     end
                 end
@@ -225,14 +249,8 @@ local function getCrewButton(crewId, itemType)
 end
 
 local function addToCrew(item, crewId) --find the button to add it to and call that.
-    --print("addToCrew")
-    local button = getCrewButton(crewId, item.itemType)
+    local button = getCrewButton(crewId, item)
     return button.addItem(item) --todo these two are failing with nil stuff
-end
-
-local function getEquippedItem(crewId, itemType)
-    local button = getCrewButton(crewId, itemType)
-    return button.item
 end
 
 local function buttonAddToCrew(button, item)
@@ -289,8 +307,9 @@ persistEquipment = function()
         else
             successes = successes + 1
             --print("persisting ", equipment.name, " genIndx ", equipment.generating_index, " slot ", equipment.assigned_slot)
-            Hyperspace.metaVariables[KEY_EQUIPMENT_GENERATING_INDEX..successes] = equipment.generating_index --todo create this
+            Hyperspace.metaVariables[KEY_EQUIPMENT_GENERATING_INDEX..successes] = equipment.generating_index
             Hyperspace.metaVariables[KEY_EQUIPMENT_ASSIGNMENT..successes] = equipment.assigned_slot--todo I need to set this value properly
+            equipment.onPersist(equipment, successes)
         end
     end
     Hyperspace.metaVariables[KEY_NUM_EQUIPS] = successes
@@ -305,6 +324,7 @@ local function loadPersistedEquipment()
         --print("index ", generationTableIndex)
         local item = mEquipmentGenerationTable[generationTableIndex]()
         local position = Hyperspace.metaVariables[KEY_EQUIPMENT_ASSIGNMENT..i]
+        item.onLoad(item, i)
         --print("loading ", item.name, " genIndx ", item.generating_index, " slot ", position)
         if position == nil then 
             position = -2
@@ -683,24 +703,21 @@ local function FerrogenicExsanguinator(item, crewmem)
     end
 end
 -------------------Egg------------------  --Any internal status, beyond just is this thing equipped, needs a custom persist/load to handle that.
---Part of this is that all items are created from scratch, and individual ids are not saved.
---Items create a persist id upon creation
---Ok, so I need to keep a list of items sorted by kind.  And then ids and internal states for all of them.
---On load, when you're creating the items of those types, said effects can be applied along with the index of the item.
---Ok actually storing index is totally state, and I should be able to do this along side that.
---Because items with the same type and index are functionally identical.
---Unless I do actually implement the all-accepting slots for some races, and then also make the slot something is in matter.
-local function loadEgg()
-    
+local KEY_EGG_VALUE = "egg_value"
+local function loadEgg(item, metaVarIndex)
+    item.sellValue = lwl.setIfNil(Hyperspace.metaVariables[KEY_EGG_VALUE..metaVarIndex], 0)
+    --print("loaded egg", item.sellValue, metaVarIndex)
 end
 
-local function persistEgg()
-    
+local function persistEgg(item, metaVarIndex)
+    --print("persist egg", item.sellValue, metaVarIndex)
+    Hyperspace.metaVariables[KEY_EGG_VALUE..metaVarIndex] = item.sellValue
 end
 
 local function Egg(item, crewmem)
     if item.jumping and not Hyperspace.ships(0).bJumping then
         item.sellValue = item.sellValue + 3
+        persistEquipment()
     end
     item.jumping = Hyperspace.ships(0).bJumping
 end
@@ -740,6 +757,18 @@ local function HolySymbolRemove(item, crewmem)
     lwce.addResist(crewmem, lwce.KEY_CORRUPTION, -.9)
 end
 -------------------Interfangilator------------------
+local KEY_INTERFANGILATOR_SUPPRESSION = "interfangilator_bars_suppressed"
+local KEY_INTERFANGILATOR_PREVIOUS_DAMAGE = "interfangilator_previous_damage"
+local function InterfangilatorLoad(item, metaVarIndex)
+    item.storedValue = lwl.setIfNil(Hyperspace.metaVariables[KEY_INTERFANGILATOR_SUPPRESSION..metaVarIndex], 0)
+    item.previousDamage = lwl.setIfNil(Hyperspace.metaVariables[KEY_INTERFANGILATOR_PREVIOUS_DAMAGE..metaVarIndex], 0)
+end
+
+local function InterfangilatorPersist(item, metaVarIndex)
+    Hyperspace.metaVariables[KEY_INTERFANGILATOR_SUPPRESSION..metaVarIndex] = item.storedValue
+    Hyperspace.metaVariables[KEY_INTERFANGILATOR_PREVIOUS_DAMAGE..metaVarIndex] = item.previousDamage
+end
+
 -- This is actually way more complex because it requires tracking which enemy ship you are facing.
 -- Reduces it by 1
 local function InterfangilatorEquip(item, crewmem)--[[  TODO FIX when a new ship is jumping in.
@@ -762,6 +791,7 @@ local function InterfangilatorApplyEffect(item, crewmem, value) --mostly checks 
         if system then
             local beforePower = system:GetPowerCap()
             print("before power", beforePower)
+            item.previousDamage = system.healthState.second - system.healthState.first
             system:UpgradeSystem(-value)
             item.storedValue = beforePower - system:GetPowerCap()
             --should also store damage status of the removed bars. may be hard.
@@ -776,7 +806,10 @@ local function InterfangilatorRemoveEffect(item, crewmem, value) --todo make thi
         if system then
             system:UpgradeSystem(value)
             if system:CompletelyDestroyed() then
-                system:SetDamage(0) --repair partial 100Xvalue
+                if item.previousDamage then
+                    system.healthState.first = system.healthState.second - item.previousDamage
+                end
+                --system:SetDamage(0) --repair partial 100Xvalue
             end
         end
     end
@@ -798,6 +831,10 @@ local function Interfangilator(item, crewmem)
     item.systemId = crewmem.iManningId
     item.system = crewmem.currentSystem
     item.shipId = crewmem.currentShipId
+    if crewmem.currentSystem then
+        local healthState = crewmem.currentSystem.healthState
+        print("System health state is ", healthState.first, healthState.second)
+    end
 end
 
 local function InterfangilatorRemove(item, crewmem)
@@ -828,10 +865,6 @@ local function CustomInterfangilator(item, crewmem)
     item.systemId = crewmem.iManningId
     item.system = crewmem.currentSystem
     item.shipId = crewmem.currentShipId
-end
-
-local function CustomInterfangilatorRemove(item, crewmem)
-    InterfangilatorRemoveEffect(item, crewmem, item.storedValue)
 end
 -------------------Compactifier------------------
 local function CompactifierEquip(item, crewmem) --needs stat boost 1.20
@@ -911,9 +944,9 @@ local VOID_RING_NAME = "Ring of Void (DUD)"
 local THIEFS_HAND_NAME = "Thief's Hand"
 local THIEFS_HAND_DESCRIPTION_DORMANT = "Said to once belong to the greatest thief in the multiverse, this disembodied hand has the ability to steal from space itself!  The spoils though, are much less remarkable."
 
-local function thiefsHandMerge(crewmem)
-    local voidRingButton = getCrewButton(crewmem.extend.selfId, TYPE_WEAPON)
-    local thiefsHandButton = getCrewButton(crewmem.extend.selfId, TYPE_TOOL)
+local function voidRingThiefsHandMerge(crewmem)
+    local voidRingButton = getCrewButtonWithItem(crewmem.extend.selfId, VOID_RING_NAME)
+    local thiefsHandButton = getCrewButtonWithItem(crewmem.extend.selfId, THIEFS_HAND_NAME)
     deleteItem(voidRingButton, voidRingButton.item)
     deleteItem(thiefsHandButton, thiefsHandButton.item)
     gex_give_item(mNameToItemIndexTable[AWOKEN_THIEFS_HAND_NAME])
@@ -921,11 +954,8 @@ local function thiefsHandMerge(crewmem)
 end
 
 local function ThiefsHandEquip(item, crewmem)
-    local otherItem = getEquippedItem(crewmem.extend.selfId, TYPE_WEAPON)
-    if not otherItem then return end
-    print("hand", otherItem.name)
-    if (otherItem.name == VOID_RING_NAME) then
-        thiefsHandMerge(crewmem)
+    if (crewHasItem(crewmem.extend.selfId, VOID_RING_NAME)) then
+        voidRingThiefsHandMerge(crewmem)
     end
 end
 
@@ -940,11 +970,8 @@ end
 -------------------Ring of Void------------------
 --Thief's Hand now spawns all objects when equipped to the same person.  Also increases spawn chance to 80%.
 local function VoidRingEquip(item, crewmem)
-    local otherItem = getEquippedItem(crewmem.extend.selfId, TYPE_TOOL)
-    if not otherItem then return end
-    print("void", otherItem.name)
-    if (otherItem.name == THIEFS_HAND_NAME) then
-        thiefsHandMerge(crewmem)
+    if (crewHasItem(crewmem.extend.selfId, THIEFS_HAND_NAME)) then
+        voidRingThiefsHandMerge(crewmem)
     end
 end
 
@@ -1022,17 +1049,17 @@ insertItemDefinition({name="Orgainc Impulse Grafts (DUD)", itemType=TYPE_ARMOR, 
 insertItemDefinition({name="Testing Status Tool", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/Untitled.png"), description="ALL OF THEM!!!  A complicated-looking device that inflicts its wearer with all manner of ill effects.  Thankfully, someone else wants it more than you do.", onTick=statusTest, onEquip=statusTestEquip, onRemove=statusTestRemove, sellValue=15})
 insertItemDefinition({name="Omelas Generator", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/leaves_of_good_fortune.png"), description="Power, at any cost.  Equiped crew adds four ship power but slowly stacks corruption.", onTick=OmelasGenerator, onEquip=OmelasGeneratorEquip, onRemove=OmelasGeneratorRemove})
 insertItemDefinition({name="Ferrogenic Exsanguinator", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/grafted.png"), description="'The machine god requires a sacrifice of blood, and I give it gladly.'  Biomechanical tendrils wrap around this crew, extracting their life force to hasten repairs.", onTick=FerrogenicExsanguinator})
-insertItemDefinition({name="Egg", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/egg.png"), description="Gains 3 sell value each jump.", onTick=Egg, sellValue=0})
+insertItemDefinition({name="Egg", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/egg.png"), description="Gains 3 sell value each jump.", onTick=Egg, onLoad=loadEgg, onPersist=persistEgg, sellValue=0})
 insertItemDefinition({name="Myocardial Overcharger (DUD)", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/brain_gang.png"), description="Grows in power with each item sold.", onTick=MyocardialOvercharger, onEquip=MyocardialOverchargerEquip, onRemove=MyocardialOverchargerRemove})
-insertItemDefinition({name="Holy Symbol", itemType=TYPE_WEAPON, renderFunction=HolySymbolRender(), description="Renders its wearer nigh impervious to corruption.", onEquip=HolySymbolEquip, onRemove=HolySymbolRemove, sellValue=10})
-insertItemDefinition({name="Interfangilator", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/detector.png"), description="Attaches to the frequency signatures of matching enemy systems and inhibits them, reducing them by a bar.", onEquip=InterfangilatorEquip, onTick=Interfangilator, onRemove=InterfangilatorRemove})
-insertItemDefinition({name="Custom Interfangilator", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/custom_detector.png"), description="Their expertise becomes their sword, and enemy systems fall. An aftermarket model which scales based on the crew's skill level with the current system.", onEquip=InterfangilatorEquip, onTick=CustomInterfangilator, onRemove=CustomInterfangilatorRemove})
+insertItemDefinition({name="Holy Symbol", itemType=TYPE_WEAPON, renderFunction=HolySymbolRender(), description="Renders its wearer nigh impervious to corruption (Not the DD kind).", onEquip=HolySymbolEquip, onRemove=HolySymbolRemove, sellValue=10})
+insertItemDefinition({name="Interfangilator", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/detector.png"), description="Attaches to the frequency signatures of matching enemy system rooms and inhibits them, reducing them by a bar.", onEquip=InterfangilatorEquip, onTick=Interfangilator, onRemove=InterfangilatorRemove, onLoad=InterfangilatorLoad, onPersist=InterfangilatorPersist})
+insertItemDefinition({name="Custom Interfangilator", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/custom_detector.png"), description="Their expertise becomes their sword, and enemy systems fall. An aftermarket model which scales based on the crew's skill level with the current system.", onEquip=InterfangilatorEquip, onTick=CustomInterfangilator, onRemove=InterfangilatorRemove, onLoad=InterfangilatorLoad, onPersist=InterfangilatorPersist})
 insertItemDefinition({name="Compactifier (DUD)", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/decrepit paper.png"), description="Nearly illegible documents stating that this crew 'Doesn't count'.", onEquip=CompactifierEquip, onRemove=CompactifierRemove})
 insertItemDefinition({name="Internecion Cube", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/internecion_cube.png"), description=IC_on_TEXT, onEquip=InternecionCubeEquip, onTick=InternecionCube})
 insertItemDefinition(PGO_DEFINITION)
 insertItemDefinition(THREE_PGO_DEFINITION)
 insertItemDefinition({name="Thief's Hand", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/thiefs_hand.png"), description=THIEFS_HAND_DESCRIPTION_DORMANT, onEquip=ThiefsHandEquip, onTick=ThiefsHand})
-insertItemDefinition({name=VOID_RING_NAME, itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/ring_of_void.png"), description="Greater than what it seems.  Equipped crew can't fight or be targeted in combat.", onEquip=VoidRingEquip, onTick=VoidRing})
+insertItemDefinition({name=VOID_RING_NAME, itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/ring_of_void.png"), description="More than it seems.  Equipped crew can't fight or be targeted in combat.", onEquip=VoidRingEquip, onTick=VoidRing})
 insertItemDefinition({name=AWOKEN_THIEFS_HAND_NAME, itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/awoken_rogues_hand.png"), description=AWOKEN_THIEFS_HAND_DESCRIPTION, onTick=AwokenThiefsHand, secret=true})
 --print("numequips after", #mEquipmentGenerationTable)
 print("name table", lwl.dumpObject(mNameToItemIndexTable))
