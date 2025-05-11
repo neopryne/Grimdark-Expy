@@ -324,6 +324,7 @@ local function loadPersistedEquipment()
         --print("index ", generationTableIndex)
         local item = mEquipmentGenerationTable[generationTableIndex]()
         local position = Hyperspace.metaVariables[KEY_EQUIPMENT_ASSIGNMENT..i]
+        print("custom loading", item.name, i)
         item.onLoad(item, i)
         --print("loading ", item.name, " genIndx ", item.generating_index, " slot ", position)
         if position == nil then 
@@ -361,7 +362,7 @@ local function buildInventoryContainer()
         verticalContainer.addObject(horizContainer)
     end
     return verticalContainer
-end 
+end
 
 local function buildIButton(filterFunction, renderFunction, itemTypes, crewId)
     local standardButton = lwui.buildInventoryButton("", 0, 0, mCrewLineHeight, mCrewLineHeight,
@@ -765,23 +766,8 @@ local function InterfangilatorLoad(item, metaVarIndex)
 end
 
 local function InterfangilatorPersist(item, metaVarIndex)
-    Hyperspace.metaVariables[KEY_INTERFANGILATOR_SUPPRESSION..metaVarIndex] = item.storedValue
-    Hyperspace.metaVariables[KEY_INTERFANGILATOR_PREVIOUS_DAMAGE..metaVarIndex] = item.previousDamage
-end
-
--- This is actually way more complex because it requires tracking which enemy ship you are facing.
--- Reduces it by 1
-local function InterfangilatorEquip(item, crewmem)--[[  TODO FIX when a new ship is jumping in.
-    print("skill level", crewmem:GetSkillLevel(0))
-    print("skill modifier", crewmem:GetSkillModifier(0))
-    print("skill progress", crewmem:GetSkillProgress(0))
-    print("skill from system", Hyperspace.CrewMember.GetSkillFromSystem(0))
-    crewmem:MasterSkill(0)
-    
-    print("skill level", crewmem:GetSkillLevel(0))
-    print("skill modifier", crewmem:GetSkillModifier(0))
-    print("skill progress", crewmem:GetSkillProgress(0))
-    print("skill from system", Hyperspace.CrewMember.GetSkillFromSystem(0))--]]
+    Hyperspace.metaVariables[KEY_INTERFANGILATOR_SUPPRESSION..metaVarIndex] = lwl.setIfNil(item.storedValue, 0)
+    Hyperspace.metaVariables[KEY_INTERFANGILATOR_PREVIOUS_DAMAGE..metaVarIndex] = lwl.setIfNil(item.previousDamage, 0)
 end
 
 local function InterfangilatorApplyEffect(item, crewmem, value) --mostly checks crewmem values
@@ -799,6 +785,7 @@ local function InterfangilatorApplyEffect(item, crewmem, value) --mostly checks 
     end
 end
 
+--todo passing system is cleaner here
 local function InterfangilatorRemoveEffect(item, crewmem, value) --todo make this use item.system  --mostly checks item values
     if item.systemId and item.systemId >= 0 and Hyperspace.ships.enemy and (item.shipId == crewmem.iShipId) then
         local system = Hyperspace.ships.enemy:GetSystem(item.systemId)
@@ -812,6 +799,8 @@ local function InterfangilatorRemoveEffect(item, crewmem, value) --todo make thi
                 --system:SetDamage(0) --repair partial 100Xvalue
             end
         end
+        item.previousDamage = 0
+        item.storedValue = 0
     end
 end
 
@@ -1052,8 +1041,8 @@ insertItemDefinition({name="Ferrogenic Exsanguinator", itemType=TYPE_TOOL, rende
 insertItemDefinition({name="Egg", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/egg.png"), description="Gains 3 sell value each jump.", onTick=Egg, onLoad=loadEgg, onPersist=persistEgg, sellValue=0})
 insertItemDefinition({name="Myocardial Overcharger (DUD)", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/brain_gang.png"), description="Grows in power with each item sold.", onTick=MyocardialOvercharger, onEquip=MyocardialOverchargerEquip, onRemove=MyocardialOverchargerRemove})
 insertItemDefinition({name="Holy Symbol", itemType=TYPE_WEAPON, renderFunction=HolySymbolRender(), description="Renders its wearer nigh impervious to corruption (Not the DD kind).", onEquip=HolySymbolEquip, onRemove=HolySymbolRemove, sellValue=10})
-insertItemDefinition({name="Interfangilator", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/detector.png"), description="Attaches to the frequency signatures of matching enemy system rooms and inhibits them, reducing them by a bar.", onEquip=InterfangilatorEquip, onTick=Interfangilator, onRemove=InterfangilatorRemove, onLoad=InterfangilatorLoad, onPersist=InterfangilatorPersist})
-insertItemDefinition({name="Custom Interfangilator", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/custom_detector.png"), description="Their expertise becomes their sword, and enemy systems fall. An aftermarket model which scales based on the crew's skill level with the current system.", onEquip=InterfangilatorEquip, onTick=CustomInterfangilator, onRemove=InterfangilatorRemove, onLoad=InterfangilatorLoad, onPersist=InterfangilatorPersist})
+insertItemDefinition({name="Interfangilator", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/detector.png"), description="Attaches to the frequency signatures of matching enemy system rooms and inhibits them, reducing them by a bar.", onTick=Interfangilator, onRemove=InterfangilatorRemove, onLoad=InterfangilatorLoad, onPersist=InterfangilatorPersist})
+insertItemDefinition({name="Custom Interfangilator", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/custom_detector.png"), description="Their expertise becomes their sword, and enemy systems fall. An aftermarket model which scales based on the crew's skill level with the current system.", onTick=CustomInterfangilator, onRemove=InterfangilatorRemove, onLoad=InterfangilatorLoad, onPersist=InterfangilatorPersist})
 insertItemDefinition({name="Compactifier (DUD)", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/decrepit paper.png"), description="Nearly illegible documents stating that this crew 'Doesn't count'.", onEquip=CompactifierEquip, onRemove=CompactifierRemove})
 insertItemDefinition({name="Internecion Cube", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/internecion_cube.png"), description=IC_on_TEXT, onEquip=InternecionCubeEquip, onTick=InternecionCube})
 insertItemDefinition(PGO_DEFINITION)
