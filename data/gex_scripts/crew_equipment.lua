@@ -5,6 +5,7 @@ local lwcco = mods.lightweight_crew_change_observer
 local lwsil = mods.lightweight_self_indexing_list
 local lwce = mods.lightweight_crew_effects
 local gecs = mods.gex_equip_crew_slots
+local Brightness = mods.brightness
 lwce.RequestInitialization()
 
 --As library, needs to reject things with duplicate names, pop error. lib in lwl, GEXPy uses lib and adds the items.
@@ -14,11 +15,12 @@ if not lwl then
 end
 
 --[[
-TODO give different crew types different equipment slots.  Uniques and humans get all of them.  Likely elites as well.
-Humans get two slots, but they get to pick.
-Cognitives get wildcard slots.
 
 --Also note that due to how I've constructed this, items may stick around after the crew using them has died, so I need to make sure the calls don't error.
+crew observer breaks sometimes and there's a memory leak, possibly in effects.
+The more Out There items need visual effects to indicate what they're doing.  Brightness interfalginator transparent thing over the affected room middle
+Change enemy status to be always on.
+Icons duplicate render on the enemy ship.  This seems like it might? be a brightness bug, and it doesn't impact gameplay, so I'll wait for Brightlord to get back.
 --]]
 
 ----------------------------------------------------DEFINES----------------------
@@ -114,7 +116,7 @@ end
 
 local function generateStandardFilterFunction(itemType)
    return function(item)
-       print("checking ", item.name, item.itemType, "against", itemType)
+       --print("checking ", item.name, item.itemType, "against", itemType)
        return (item ~= nil and item.itemType == itemType)
    end
 end
@@ -209,14 +211,18 @@ end
 --returns the first found button with the given name item
 local function getCrewButtonWithItem(crewId, itemName)
     for _, crewContainer in ipairs(mCrewListContainer.objects) do
-        --print("checking row ", crewContainer[GEX_CREW_ID])
+        print("checking row ", crewContainer[GEX_CREW_ID], ", total rows", #mCrewListContainer.objects)
         if (crewContainer[GEX_CREW_ID] == crewId) then
-            --print("crew found, looking for button that can hold", item.itemType)
+            print("crew found, looking for button that has", itemName)
             for _, iButton in ipairs(crewContainer.objects) do
-                --print("checking for buttons ", iButton.className)
+                print("checking for buttons ", iButton.className)
                 if (iButton.className == "inventoryButton") then--todo expose these values
-                    if (iButton.item and iButton.item.name == itemName) then
-                        return iButton
+                    print("Item is", iButton.item)
+                    if (iButton.item) then
+                        print("Name is", iButton.item.name, "checking against", itemName)
+                        if iButton.item.name == itemName then
+                            return iButton
+                        end
                     end
                 end
             end
@@ -225,7 +231,7 @@ local function getCrewButtonWithItem(crewId, itemName)
 end
 
 local function crewHasItem(crewId, itemName)
-    local button = getCrewButtonWithItem(crewId, itemType)
+    local button = getCrewButtonWithItem(crewId, itemName)
     return (button ~= nil)
 end
 
@@ -758,6 +764,9 @@ local function HolySymbolRemove(item, crewmem)
     lwce.addResist(crewmem, lwce.KEY_CORRUPTION, -.9)
 end
 -------------------Interfangilator------------------
+function systemHeal(id)
+    Hyperspace.ships(1):GetSystem(id):UpgradeSystem(2)
+end
 local KEY_INTERFANGILATOR_SUPPRESSION = "interfangilator_bars_suppressed"
 local KEY_INTERFANGILATOR_PREVIOUS_DAMAGE = "interfangilator_previous_damage"
 local function InterfangilatorLoad(item, metaVarIndex)
@@ -771,34 +780,48 @@ local function InterfangilatorPersist(item, metaVarIndex)
 end
 
 local function InterfangilatorApplyEffect(item, crewmem, value) --mostly checks crewmem values
-    if crewmem.iManningId >= 0 and Hyperspace.ships.enemy and (crewmem.currentShipId == crewmem.iShipId) then
-        local system = Hyperspace.ships.enemy:GetSystem(crewmem.iManningId)
-        print("if applying", crewmem.iManningId, "system is", system, value)
+    local targetShipManager = Hyperspace.ships(1 - crewmem.iShipId)
+    if crewmem.iManningId >= 0 and targetShipManager and (crewmem.currentShipId == crewmem.iShipId) then
+        local system = targetShipManager:GetSystem(crewmem.iManningId)
         if system then
+            print("if applying", value, "system is", system.name)
             local beforePower = system:GetPowerCap()
             print("before power", beforePower)
             item.previousDamage = system.healthState.second - system.healthState.first
             system:UpgradeSystem(-value)
             item.storedValue = beforePower - system:GetPowerCap()
+            local targetPosition = targetShipManager:GetRoomCenter(system:GetRoomId())
+            item.roomEffect = Brightness.create_particle("particles/Interfangilator", 1, 60, targetPosition, 0, targetShipManager.iShipId, "SHIP_MANAGER")
+            print("Stored value ", item.storedValue)
+            item.roomEffect.persists = true
             --should also store damage status of the removed bars. may be hard.
         end
     end
 end
 
---todo passing system is cleaner here
-local function InterfangilatorRemoveEffect(item, crewmem, value) --todo make this use item.system  --mostly checks item values
-    if item.systemId and item.systemId >= 0 and Hyperspace.ships.enemy and (item.shipId == crewmem.iShipId) then
-        local system = Hyperspace.ships.enemy:GetSystem(item.systemId)
-        print("if removed", item.systemId, "system is", system, value)
-        if system then
-            system:UpgradeSystem(value)
-            if system:CompletelyDestroyed() then
+local function removeRoomEffect(item)
+    if item.roomEffect then
+        Brightness.destroy_particle(item.roomEffect)
+        item.roomEffect = nil
+    end
+end
+
+--todo sseems like loading with an enemy system fully disabled crashes your save.
+local function InterfangilatorRemoveEffect(item, crewmem)
+    local targetShipManager = Hyperspace.ships(1 - crewmem.iShipId)
+    if item.system and targetShipManager and item.storedValue then
+        local targetSystem = targetShipManager:GetSystem(item.system:GetId())
+        if targetSystem then
+            print("if removing ", targetSystem.name, item.storedValue)
+            targetSystem:UpgradeSystem(item.storedValue)
+            print("if upgraded system by ", item.storedValue)
+            if targetSystem:CompletelyDestroyed() then
                 if item.previousDamage then
-                    system.healthState.first = system.healthState.second - item.previousDamage
+                    targetSystem.healthState.first = targetSystem.healthState.second - item.previousDamage
                 end
-                --system:SetDamage(0) --repair partial 100Xvalue
             end
         end
+        removeRoomEffect(item)
         item.previousDamage = 0
         item.storedValue = 0
     end
@@ -811,49 +834,46 @@ local function Interfangilator(item, crewmem)
     end
     item.jumping = Hyperspace.ships(0).bJumping
     
-    if item.ready or ((item.system ~= crewmem.currentSystem) and (item.shipId == crewmem.iShipId)) then
+    if (not Hyperspace.ships.enemy) or Hyperspace.ships.enemy.bDestroyed then --todo clean up this logic
+        removeRoomEffect(item)
+    end
+
+    --print("if checking", item.ready, item.system ~= crewmem.currentSystem)
+    if item.ready or ((item.system ~= crewmem.currentSystem))then
         --print("IFID is now ", crewmem.iManningId)
-        InterfangilatorRemoveEffect(item, crewmem, 1)
+        InterfangilatorRemoveEffect(item, crewmem)
         InterfangilatorApplyEffect(item, crewmem, 1)
         item.ready = false
     end
-    item.systemId = crewmem.iManningId
     item.system = crewmem.currentSystem
-    item.shipId = crewmem.currentShipId
-    if crewmem.currentSystem then
+    --[[if crewmem.currentSystem then
         local healthState = crewmem.currentSystem.healthState
         print("System health state is ", healthState.first, healthState.second)
-    end
+    end]]
 end
 
 local function InterfangilatorRemove(item, crewmem)
-    InterfangilatorRemoveEffect(item, crewmem, item.storedValue)
+    InterfangilatorRemoveEffect(item, crewmem)
 end
 -------------------Custom Interfangilator------------------
 -- Reduces it by the crew's skill level in that system.
-local function CustomInterfangilatorLevel(item, crewmem)
+local function CustomInterfangilatorLevel(crewmem)
     return crewmem:GetSkillLevel(Hyperspace.CrewMember.GetSkillFromSystem(crewmem.iManningId)) - 1
 end
 
-local function CustomInterfangilator(item, crewmem)
+local function CustomInterfangilator(item, crewmem) --todo misbehaves if crew skilled up while active, but that happens like twice.
     if item.jumping and not Hyperspace.ships(0).bJumping then
         item.ready = true
     end
     item.jumping = Hyperspace.ships(0).bJumping
     
-    if item.ready or ((item.system ~= crewmem.currentSystem) and (item.shipId == crewmem.iShipId)) then
-        --print("CIFID is now ", crewmem.iManningId)
-        --todo misbehaves if crew skilled up while active, but that happens like twice.
-        item.storedValue = lwl.setIfNil(item.storedValue, CustomInterfangilatorLevel(item, crewmem))
-        InterfangilatorRemoveEffect(item, crewmem, item.storedValue)
-        item.storedValue = CustomInterfangilatorLevel(item, crewmem)
-        InterfangilatorApplyEffect(item, crewmem, item.storedValue)
+    if item.ready or ((item.system ~= crewmem.currentSystem)) then
+        item.storedValue = lwl.setIfNil(item.storedValue, CustomInterfangilatorLevel(crewmem))
+        InterfangilatorRemoveEffect(item, crewmem)
+        InterfangilatorApplyEffect(item, crewmem, CustomInterfangilatorLevel(crewmem))
         item.ready = false
-        item.systemId = crewmem.iManningId
     end
-    item.systemId = crewmem.iManningId
     item.system = crewmem.currentSystem
-    item.shipId = crewmem.currentShipId
 end
 -------------------Compactifier------------------
 local function CompactifierEquip(item, crewmem) --needs stat boost 1.20
@@ -1049,7 +1069,7 @@ insertItemDefinition(PGO_DEFINITION)
 insertItemDefinition(THREE_PGO_DEFINITION)
 insertItemDefinition({name="Thief's Hand", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/thiefs_hand.png"), description=THIEFS_HAND_DESCRIPTION_DORMANT, onEquip=ThiefsHandEquip, onTick=ThiefsHand})
 insertItemDefinition({name=VOID_RING_NAME, itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/ring_of_void.png"), description="More than it seems.  Equipped crew can't fight or be targeted in combat.", onEquip=VoidRingEquip, onTick=VoidRing})
-insertItemDefinition({name=AWOKEN_THIEFS_HAND_NAME, itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/awoken_rogues_hand.png"), description=AWOKEN_THIEFS_HAND_DESCRIPTION, onTick=AwokenThiefsHand, secret=true})
+insertItemDefinition({name=AWOKEN_THIEFS_HAND_NAME, itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/awoken_rogues_hand.png"), description=AWOKEN_THIEFS_HAND_DESCRIPTION, onTick=AwokenThiefsHand, sellValue=13, secret=true})
 --print("numequips after", #mEquipmentGenerationTable)
 print("name table", lwl.dumpObject(mNameToItemIndexTable))
 
@@ -1084,6 +1104,9 @@ function gex_give_random_item(includeSecrets)
             print("Rolled a secret, rerolling", genIndex)
             genIndex = math.random(1, #mEquipmentGenerationTable)
         end
+        print("Found something that was not a secret", genIndex)
+    else
+        print("Found something that could be a secret", genIndex)
     end
     
     return gex_give_item(genIndex)
