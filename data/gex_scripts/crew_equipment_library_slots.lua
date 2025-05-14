@@ -1,13 +1,18 @@
-mods.gex_equip_crew_slots = {}
-local gecs = mods.gex_equip_crew_slots
-
+mods.crew_equipment_library_slots = {}
+local cels = mods.crew_equipment_library_slots
 
 local TYPE_WEAPON = "Weapon"
 local TYPE_ARMOR = "Armor"
 local TYPE_TOOL = "Tool"
-local TYPE_NONE = "None"
-local TYPE_SPACER = "Spacer" --half width
-local TYPE_ANY = "Any" --todo use these
+local TYPE_NONE = "None" --greyed out
+local TYPE_SPACER = "Spacer" --half width, not a button
+local TYPE_ANY = "Any" --wildcard
+cels.TYPE_WEAPON = TYPE_WEAPON
+cels.TYPE_ARMOR = TYPE_ARMOR
+cels.TYPE_TOOL = TYPE_TOOL
+cels.TYPE_ANY = TYPE_ANY
+cels.TYPE_NONE = TYPE_NONE
+cels.TYPE_SPACER = TYPE_SPACER
 
 local SLOTS_ALL = {TYPE_WEAPON, TYPE_ARMOR, TYPE_TOOL}--default.  For this reason, most uniques and all morphs are off the list.
 local SLOTS_NONE = {TYPE_NONE, TYPE_NONE, TYPE_NONE}
@@ -18,17 +23,27 @@ local SLOTS_ONLYWEAPON = {TYPE_WEAPON, TYPE_NONE, TYPE_NONE}
 local SLOTS_ANYTWO = {TYPE_SPACER, TYPE_ANY, TYPE_ANY} --todo this is the hardest because it requires additonal logic, mostly for rendering 
 local SLOTS_WILDCARD = {TYPE_ANY, TYPE_ANY, TYPE_ANY}
 local CREW_STAT_TABLE
-mods.gex_equip_crew_slots.SLOTS_ALL = SLOTS_ALL
-mods.gex_equip_crew_slots.SLOTS_NONE = SLOTS_NONE
-mods.gex_equip_crew_slots.SLOTS_NOWEAPON = SLOTS_NOWEAPON
-mods.gex_equip_crew_slots.SLOTS_NOTOOL = SLOTS_NOTOOL
-mods.gex_equip_crew_slots.SLOTS_NOARMOR = SLOTS_NOARMOR
-mods.gex_equip_crew_slots.SLOTS_ONLYWEAPON = SLOTS_ONLYWEAPON
-mods.gex_equip_crew_slots.SLOTS_ANYTWO = SLOTS_ANYTWO
---??? idk how you signal this  Oh, you have the exclusion functions here.  Nope not here, the other place but you still have them.
---Because of how the UI works, I can't (yet) do stuff like two weapon slots
 
-function mods.gex_equip_crew_slots.getCrewSlots(race)
+cels.SLOTS_ALL = SLOTS_ALL
+cels.SLOTS_NONE = SLOTS_NONE
+cels.SLOTS_NOWEAPON = SLOTS_NOWEAPON
+cels.SLOTS_NOTOOL = SLOTS_NOTOOL
+cels.SLOTS_NOARMOR = SLOTS_NOARMOR
+cels.SLOTS_ONLYWEAPON = SLOTS_ONLYWEAPON
+cels.SLOTS_ANYTWO = SLOTS_ANYTWO
+
+------------------------------------API----------------------------------------------------------
+---Add a new crew type, or change the slots of an existing one.
+---@param raceName string
+---@param slots table of CELS TYPE_ values.  You can use the predefined onces or create your own.
+function cels.setRaceSlotDefinition(raceName, slots)
+    CREW_STAT_TABLE[race] = slots
+end
+
+---If not found, defaults to the standard three.  Mostly for use by CEL internally.  
+---@param race string
+---@return table
+function cels.getCrewSlots(race)
     local slotTypes = CREW_STAT_TABLE[race]
     if slotTypes then
         return slotTypes
@@ -36,11 +51,9 @@ function mods.gex_equip_crew_slots.getCrewSlots(race)
         return SLOTS_ALL
     end
 end
- 
---Base crew get 12 total stats.  Elite/Unique can have more.
---todo get all the names for the keys of this table
+------------------------------------END API----------------------------------------------------------
+
 CREW_STAT_TABLE = {
-    --human has all of the traits for copying purposes, lowercase numbers are modifiers so human has 3s across the board.
     human=SLOTS_ANYTWO,
     human_humanoid=SLOTS_ANYTWO,
     human_engineer=SLOTS_ANYTWO,
@@ -60,7 +73,7 @@ CREW_STAT_TABLE = {
     unique_jerry_pony=SLOTS_WILDCARD,
     unique_jerry_pony_crystal=SLOTS_WILDCARD,
     unique_leah=SLOTS_WILDCARD,
-    unique_leah_mfk=SLOTS_WILDCARD,--TODO
+    unique_leah_mfk=SLOTS_WILDCARD,
     unique_ellie=SLOTS_ONLYWEAPON,
     unique_ellie_stephan=SLOTS_ANYTWO,
     unique_ellie_lvl1=SLOTS_ONLYWEAPON,
