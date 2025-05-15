@@ -1,21 +1,16 @@
 if (not mods) then mods = {} end
 local lwl = mods.lightweight_lua
 local lwui = mods.lightweight_user_interface
-local lwcco = mods.lightweight_crew_change_observer
-local lwsil = mods.lightweight_self_indexing_list
 local lwce = mods.lightweight_crew_effects
-local gecs = mods.gex_equip_crew_slots
+local cel = mods.crew_equipment_library
 local Brightness = mods.brightness
-lwce.RequestInitialization()
 
 --As library, needs to reject things with duplicate names, pop error. lib in lwl, GEXPy uses lib and adds the items.
 --I probably need to hash out custom persist stuff first.
-if not lwl then
-    error("Lightweight Lua was not patched, or was patched after Grimdark Expy.  Install it properly or face undefined behavior.")
+if not cel then
+    error("Crew Equipment Library was not patched, or was patched after Grimdark Expy.  Install it properly or face undefined behavior.")
 end
-
 ----------------------------------------------------DEFINES----------------------
-
 
 --[[
 --Crew name list
@@ -164,7 +159,7 @@ end
 -------------------Egg------------------  --Any internal status, beyond just is this thing equipped, needs a custom persist/load to handle that.
 local KEY_EGG_VALUE = "egg_value"
 local function loadEgg(item, metaVarIndex)
-    item.sellValue = lwl.setIfNil(Hyperspace.metaVariables[KEY_EGG_VALUE..metaVarIndex], 0)
+    item.sellValue = math.floor(lwl.setIfNil(Hyperspace.metaVariables[KEY_EGG_VALUE..metaVarIndex], 0))
     --print("loaded egg", item.sellValue, metaVarIndex)
 end
 
@@ -386,8 +381,8 @@ local function PerfectlyGenericObjectCreate(item)
     gex_give_item(cel.mNameToItemIndexTable[PGO_NAME])
 end
 
-local PGO_DEFINITION = {name=PGO_NAME, itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction(PGO_SPRITE), description=PGO_DESCRIPTION, secret=true}
-local THREE_PGO_DEFINITION = {name=THREE_PGO_NAME, itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction(PGO_SPRITE),
+local PGO_DEFINITION = {name=PGO_NAME, itemType=cel.TYPE_TOOL, renderFunction=lwui.spriteRenderFunction(PGO_SPRITE), description=PGO_DESCRIPTION, secret=true}
+local THREE_PGO_DEFINITION = {name=THREE_PGO_NAME, itemType=cel.TYPE_TOOL, renderFunction=lwui.spriteRenderFunction(PGO_SPRITE),
     description=PGO_DESCRIPTION, onCreate=PerfectlyGenericObjectCreate}
 -- a small chance each jump to spawn another?  No, that will be a different thing.  Then more things that care about the number of things you have.
 -------------------Awoken Thief's Hand------------------
@@ -409,8 +404,8 @@ local THIEFS_HAND_NAME = "Thief's Hand"
 local THIEFS_HAND_DESCRIPTION_DORMANT = "Said to once belong to the greatest thief in the multiverse, this disembodied hand has the ability to steal from space itself!  The spoils though, are much less remarkable."
 
 local function voidRingThiefsHandMerge(crewmem)
-    local voidRingButton = getCrewButtonWithItem(crewmem.extend.selfId, VOID_RING_NAME)
-    local thiefsHandButton = getCrewButtonWithItem(crewmem.extend.selfId, THIEFS_HAND_NAME)
+    local voidRingButton = cel.getCrewButtonWithItem(crewmem.extend.selfId, VOID_RING_NAME)
+    local thiefsHandButton = cel.getCrewButtonWithItem(crewmem.extend.selfId, THIEFS_HAND_NAME)
     cel.deleteItem(voidRingButton, voidRingButton.item)
     cel.deleteItem(thiefsHandButton, thiefsHandButton.item)
     gex_give_item(cel.mNameToItemIndexTable[AWOKEN_THIEFS_HAND_NAME])
@@ -418,7 +413,7 @@ local function voidRingThiefsHandMerge(crewmem)
 end
 
 local function ThiefsHandEquip(item, crewmem)
-    if (crewHasItem(crewmem.extend.selfId, VOID_RING_NAME)) then
+    if (cel.crewHasItem(crewmem.extend.selfId, VOID_RING_NAME)) then
         voidRingThiefsHandMerge(crewmem)
     end
 end
@@ -434,7 +429,7 @@ end
 -------------------Ring of Void------------------
 --Thief's Hand now spawns all objects when equipped to the same person.  Also increases spawn chance to 80%.
 local function VoidRingEquip(item, crewmem)
-    if (crewHasItem(crewmem.extend.selfId, THIEFS_HAND_NAME)) then
+    if (cel.crewHasItem(crewmem.extend.selfId, THIEFS_HAND_NAME)) then
         voidRingThiefsHandMerge(crewmem)
     end
 end
@@ -469,29 +464,29 @@ Blood is Mine, something else I forgot for art assets
 FTF Discette
 A collection of the latest tracks from backwater bombshell Futanari Titwhore Fiasco
 --]]--45 c cvgbhbhyh bbb
-insertItemDefinition({name="Shredder Cuffs", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/SpikedCuffs.png"), description="Looking sharp.  Extra damage in melee.", onTick=ShredderCuffs, sellValue=3})
-insertItemDefinition({name="Seal Head", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/SealHead.png"), description="The headbutts it enables are an effective counter to the ridicule you might encounter for wearing such odd headgear.", onTick=SealHead})
-insertItemDefinition({name="Chicago Typewriter", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/ChicagoTypewriter.png"), description="Lots of oomph in these keystrokes.  Adds a bar when manning weapons.", onTick=ChicagoTypewriter, onRemove=ChicagoTypewriterRemove})
-insertItemDefinition({name="Ballancator", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/Ballancator.png"), description="As all things should be.  Strives to keep its wearer at exactly half health.", onTick=Ballanceator})
-insertItemDefinition({name="Hellion Halberd", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/halberd.png"), description="A vicious weapon that leaves its victems with gaping wounds that bleed profusely.", onTick=HellionHalberd})
-insertItemDefinition({name="Peppy Bismol (DUD)", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/peppy_bismol.png"), description="'With Peppy Bismol, nothing will be able to keep you down!'  Increases active ability charge rate.", onTick=PeppyBismol})
-insertItemDefinition({name="Medkit (DUD)", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/medkit.png"), description="Packed full of what whales you.  +15 max health.", onEquip=MedkitEquip, onRemove=MedkitRemove})
-insertItemDefinition({name="Orgainc Impulse Grafts (DUD)", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/graft_armor.png"), description="Quickly rights abnormal status conditions. +5 max health, bleed immunity, stun resist.", onTick=GraftArmor, onEquip=GraftArmorEquip, onRemove=GraftArmorRemove})
-insertItemDefinition({name="Testing Status Tool", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/Untitled.png"), description="ALL OF THEM!!!  A complicated-looking device that inflicts its wearer with all manner of ill effects.  Thankfully, someone else wants it more than you do.", onTick=statusTest, onEquip=statusTestEquip, onRemove=statusTestRemove, sellValue=15})
-insertItemDefinition({name="Omelas Generator", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/leaves_of_good_fortune.png"), description="Power, at any cost.  Equiped crew adds four ship power but slowly stacks corruption.", onTick=OmelasGenerator, onEquip=OmelasGeneratorEquip, onRemove=OmelasGeneratorRemove})
-insertItemDefinition({name="Ferrogenic Exsanguinator", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/grafted.png"), description="'The machine god requires a sacrifice of blood, and I give it gladly.'  Biomechanical tendrils wrap around this crew, extracting their life force to hasten repairs.", onTick=FerrogenicExsanguinator})
-insertItemDefinition({name="Egg", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/egg.png"), description="Gains 3 sell value each jump.", onTick=Egg, onLoad=loadEgg, onPersist=persistEgg, sellValue=0})
-insertItemDefinition({name="Myocardial Overcharger (DUD)", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/brain_gang.png"), description="Grows in power with each item sold.", onTick=MyocardialOvercharger, onEquip=MyocardialOverchargerEquip, onRemove=MyocardialOverchargerRemove})
-insertItemDefinition({name="Holy Symbol", itemType=TYPE_WEAPON, renderFunction=HolySymbolRender(), description="Renders its wearer nigh impervious to corruption (Not the DD kind).", onEquip=HolySymbolEquip, onRemove=HolySymbolRemove, sellValue=10})
-insertItemDefinition({name="Interfangilator", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/detector.png"), description="Attaches to the frequency signatures of matching enemy system rooms and inhibits them, reducing them by a bar.", onTick=Interfangilator, onRemove=InterfangilatorRemove, onLoad=InterfangilatorLoad, onPersist=InterfangilatorPersist})
-insertItemDefinition({name="Custom Interfangilator", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/custom_detector.png"), description="Their expertise becomes their sword, and enemy systems fall. An aftermarket model which scales based on the crew's skill level with the current system.", onTick=CustomInterfangilator, onRemove=InterfangilatorRemove, onLoad=InterfangilatorLoad, onPersist=InterfangilatorPersist})
-insertItemDefinition({name="Compactifier (DUD)", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/decrepit paper.png"), description="Nearly illegible documents stating that this crew 'Doesn't count'.", onEquip=CompactifierEquip, onRemove=CompactifierRemove})
-insertItemDefinition({name="Internecion Cube", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/internecion_cube.png"), description=IC_on_TEXT, onEquip=InternecionCubeEquip, onTick=InternecionCube})
-insertItemDefinition(PGO_DEFINITION)
-insertItemDefinition(THREE_PGO_DEFINITION)
-insertItemDefinition({name="Thief's Hand", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/thiefs_hand.png"), description=THIEFS_HAND_DESCRIPTION_DORMANT, onEquip=ThiefsHandEquip, onTick=ThiefsHand})
-insertItemDefinition({name=VOID_RING_NAME, itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/ring_of_void.png"), description="More than it seems.  Equipped crew can't fight or be targeted in combat.", onEquip=VoidRingEquip, onTick=VoidRing})
-insertItemDefinition({name=AWOKEN_THIEFS_HAND_NAME, itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/awoken_rogues_hand.png"), description=AWOKEN_THIEFS_HAND_DESCRIPTION, onTick=AwokenThiefsHand, sellValue=13, secret=true})
+cel.insertItemDefinition({name="Shredder Cuffs", itemType=cel.TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/SpikedCuffs.png"), description="Looking sharp.  Extra damage in melee.", onTick=ShredderCuffs, sellValue=3})
+cel.insertItemDefinition({name="Seal Head", itemType=cel.TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/SealHead.png"), description="The headbutts it enables are an effective counter to the ridicule you might encounter for wearing such odd headgear.", onTick=SealHead})
+cel.insertItemDefinition({name="Chicago Typewriter", itemType=cel.TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/ChicagoTypewriter.png"), description="Lots of oomph in these keystrokes.  Adds a bar when manning weapons.", onTick=ChicagoTypewriter, onRemove=ChicagoTypewriterRemove})
+cel.insertItemDefinition({name="Ballancator", itemType=cel.TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/Ballancator.png"), description="As all things should be.  Strives to keep its wearer at exactly half health.", onTick=Ballanceator})
+cel.insertItemDefinition({name="Hellion Halberd", itemType=cel.TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/halberd.png"), description="A vicious weapon that leaves its victems with gaping wounds that bleed profusely.", onTick=HellionHalberd})
+cel.insertItemDefinition({name="Peppy Bismol (DUD)", itemType=cel.TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/peppy_bismol.png"), description="'With Peppy Bismol, nothing will be able to keep you down!'  Increases active ability charge rate.", onTick=PeppyBismol})
+cel.insertItemDefinition({name="Medkit (DUD)", itemType=cel.TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/medkit.png"), description="Packed full of what whales you.  +15 max health.", onEquip=MedkitEquip, onRemove=MedkitRemove})
+cel.insertItemDefinition({name="Orgainc Impulse Grafts (DUD)", itemType=cel.TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/graft_armor.png"), description="Quickly rights abnormal status conditions. +5 max health, bleed immunity, stun resist.", onTick=GraftArmor, onEquip=GraftArmorEquip, onRemove=GraftArmorRemove})
+cel.insertItemDefinition({name="Testing Status Tool", itemType=cel.TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/Untitled.png"), description="ALL OF THEM!!!  A complicated-looking device that inflicts its wearer with all manner of ill effects.  Thankfully, someone else wants it more than you do.", onTick=statusTest, onEquip=statusTestEquip, onRemove=statusTestRemove, sellValue=15})
+cel.insertItemDefinition({name="Omelas Generator", itemType=cel.TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/leaves_of_good_fortune.png"), description="Power, at any cost.  Equiped crew adds four ship power but slowly stacks corruption.", onTick=OmelasGenerator, onEquip=OmelasGeneratorEquip, onRemove=OmelasGeneratorRemove})
+cel.insertItemDefinition({name="Ferrogenic Exsanguinator", itemType=cel.TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/grafted.png"), description="'The machine god requires a sacrifice of blood, and I give it gladly.'  Biomechanical tendrils wrap around this crew, extracting their life force to hasten repairs.", onTick=FerrogenicExsanguinator})
+cel.insertItemDefinition({name="Egg", itemType=cel.TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/egg.png"), description="Gains 3 sell value each jump.", onTick=Egg, onLoad=loadEgg, onPersist=persistEgg, sellValue=0})
+cel.insertItemDefinition({name="Myocardial Overcharger (DUD)", itemType=cel.TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/brain_gang.png"), description="Grows in power with each item sold.", onTick=MyocardialOvercharger, onEquip=MyocardialOverchargerEquip, onRemove=MyocardialOverchargerRemove})
+cel.insertItemDefinition({name="Holy Symbol", itemType=cel.TYPE_WEAPON, renderFunction=HolySymbolRender(), description="Renders its wearer nigh impervious to corruption (Not the DD kind).", onEquip=HolySymbolEquip, onRemove=HolySymbolRemove, sellValue=10})
+cel.insertItemDefinition({name="Interfangilator", itemType=cel.TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/detector.png"), description="Attaches to the frequency signatures of matching enemy system rooms and inhibits them, reducing them by a bar.", onTick=Interfangilator, onRemove=InterfangilatorRemove, onLoad=InterfangilatorLoad, onPersist=InterfangilatorPersist})
+cel.insertItemDefinition({name="Custom Interfangilator", itemType=cel.TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/custom_detector.png"), description="Their expertise becomes their sword, and enemy systems fall. An aftermarket model which scales based on the crew's skill level with the current system.", onTick=CustomInterfangilator, onRemove=InterfangilatorRemove, onLoad=InterfangilatorLoad, onPersist=InterfangilatorPersist})
+cel.insertItemDefinition({name="Compactifier (DUD)", itemType=cel.TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/decrepit paper.png"), description="Nearly illegible documents stating that this crew 'Doesn't count'.", onEquip=CompactifierEquip, onRemove=CompactifierRemove})
+cel.insertItemDefinition({name="Internecion Cube", itemType=cel.TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/internecion_cube.png"), description=IC_on_TEXT, onEquip=InternecionCubeEquip, onTick=InternecionCube})
+cel.insertItemDefinition(PGO_DEFINITION)
+cel.insertItemDefinition(THREE_PGO_DEFINITION)
+cel.insertItemDefinition({name="Thief's Hand", itemType=cel.TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/thiefs_hand.png"), description=THIEFS_HAND_DESCRIPTION_DORMANT, onEquip=ThiefsHandEquip, onTick=ThiefsHand})
+cel.insertItemDefinition({name=VOID_RING_NAME, itemType=cel.TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/ring_of_void.png"), description="More than it seems.  Equipped crew can't fight or be targeted in combat.", onEquip=VoidRingEquip, onTick=VoidRing})
+cel.insertItemDefinition({name=AWOKEN_THIEFS_HAND_NAME, itemType=cel.TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/awoken_rogues_hand.png"), description=AWOKEN_THIEFS_HAND_DESCRIPTION, onTick=AwokenThiefsHand, sellValue=13, secret=true})
 --print("numequips after", #mEquipmentGenerationTable)
 
 ------------------------------------END ITEM DEFINITIONS----------------------------------------------------------
