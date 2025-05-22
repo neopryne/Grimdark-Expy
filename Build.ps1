@@ -4,7 +4,7 @@
 $relativeFile = "Grimdark_Expy.zip"
 $absolutePath = "C:\Users\GunBuild-1\Documents\Workspace\ftlman-x86_64-pc-windows-gnu\ftlman\mods\$relativeFile"
 $tempZipDir = Join-Path $env:TEMP "zip_temp"
-$filesToInclude = @("data", "mod-appendix", "img")
+$filesToInclude = @("data", "mod-appendix", "img", "audio")
 
 # Prepare temporary folder
 if (-Not (Test-Path $tempZipDir)) {

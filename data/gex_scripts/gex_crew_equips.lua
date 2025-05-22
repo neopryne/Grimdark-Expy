@@ -495,3 +495,24 @@ cel.insertItemDefinition({name=AWOKEN_THIEFS_HAND_NAME, itemType=TYPE_TOOL, rend
 --print("numequips after", #mEquipmentGenerationTable)
 
 ------------------------------------END ITEM DEFINITIONS----------------------------------------------------------
+--todo doesn't work with anything that has multiple possible results.
+if cel.addGuaranteedItemEvent then --backcompat with old library versions
+    --cel.addGuaranteedItemEvent("DROPPOINT_CRAZYZOLTAN_PAY", cel.ITEM_ANY)
+    --cel.addGuaranteedItemEvent("DROPPOINT_CACHE_OPEN", cel.ITEM_ANY)
+    cel.addGuaranteedItemEvent("DROPPOINT_BULKY_SMUGGLER_HACK", cel.ITEM_ANY)
+    cel.addGuaranteedItemEvent("S1_ZOLTAN_SHIELD_SEND_REPAIR", cel.ITEM_ANY)
+    cel.addGuaranteedItemEvent("DROPPOINT_SHIP_TOXIN_FLUSHED", cel.ITEM_ANY)
+    cel.addGuaranteedItemEvent("DROPPOINT_ESCAPE_POD_QUEST", cel.ITEM_ANY)
+    cel.addGuaranteedItemEvent("DROPPOINT_SUPPLY_DEPOT_SHORTAGE_FUEL", cel.ITEM_ANY)
+    cel.addGuaranteedItemEvent("DROPPOINT_SUPPLY_DEPOT_SHORTAGE_MISSILES", cel.ITEM_ANY)
+    cel.addGuaranteedItemEvent("DROPPOINT_SUPPLY_DEPOT_SHORTAGE_DRONES", cel.ITEM_ANY)
+else
+    error("Warning: old crew equipment library version, GEX will not add guaranteed event items.")
+end
+
+
+
+
+
+
+
