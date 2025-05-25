@@ -47,8 +47,8 @@ $ftlmanDir = "C:\Users\GunBuild-1\Documents\Workspace\ftlman-x86_64-pc-windows-g
 Push-Location $ftlmanDir
 .\ftlman.exe hyperspace-install latest
 .\ftlman.exe patch `
-    "Multiverse 5.4.5 - Assets (Patch above Data).zip" `
-    "Multiverse 5.4.6 - Data.zip" `
+    "Multiverse 5.5 - Assets (Patch above Data).zip" `
+    "Multiverse 5.5 - Data.zip" `
     "Vertex-Util.ftl" `
 	"Brightness Particles 1.4.1.zip" `
 	"Lightweight Lua.zip" `

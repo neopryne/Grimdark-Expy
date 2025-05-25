@@ -1,6 +1,7 @@
 if (not mods) then mods = {} end
 local lwl = mods.lightweight_lua
 local lwui = mods.lightweight_user_interface
+local lwsb = mods.lightweight_statboosts
 local lwce = mods.lightweight_crew_effects
 local cel = mods.crew_equipment_library
 local Brightness = mods.brightness
@@ -220,7 +221,7 @@ local KEY_INTERFANGILATOR_PREVIOUS_DAMAGE = "interfangilator_previous_damage"
 local function InterfangilatorLoad(item, metaVarIndex)
     item.storedValue = lwl.setIfNil(Hyperspace.metaVariables[KEY_INTERFANGILATOR_SUPPRESSION..metaVarIndex], 0)
     item.previousDamage = lwl.setIfNil(Hyperspace.metaVariables[KEY_INTERFANGILATOR_PREVIOUS_DAMAGE..metaVarIndex], 0)
-    print("loaded", item.name, item.storedValue, item.previousDamage)
+    --print("loaded", item.name, item.storedValue, item.previousDamage)
 end
 
 local function InterfangilatorPersist(item, metaVarIndex)
@@ -233,15 +234,15 @@ local function InterfangilatorApplyEffect(item, crewmem, value) --mostly checks 
     if crewmem.iManningId >= 0 and targetShipManager and (crewmem.currentShipId == crewmem.iShipId) then
         local system = targetShipManager:GetSystem(crewmem.iManningId)
         if system then
-            print("if applying", value, "system is", system.name)
+            --print("if applying", value, "system is", system.name)
             local beforePower = system:GetPowerCap()
-            print("before power", beforePower)
+            --print("before power", beforePower)
             item.previousDamage = system.healthState.second - system.healthState.first
             system:UpgradeSystem(-value)
             item.storedValue = beforePower - system:GetPowerCap()
             local targetPosition = targetShipManager:GetRoomCenter(system:GetRoomId())
             item.roomEffect = Brightness.create_particle("particles/Interfangilator", 1, 60, targetPosition, 0, targetShipManager.iShipId, "SHIP_MANAGER")
-            print("Stored value ", item.storedValue, "system now has", system.healthState.second, "bars")
+            --print("Stored value ", item.storedValue, "system now has", system.healthState.second, "bars")
             item.roomEffect.persists = true
             --should also store damage status of the removed bars. may be hard.
             cel.persistEquipment()
@@ -259,19 +260,19 @@ end
 --todo sseems like loading with an enemy system fully disabled crashes your save.  I could fix this by not 
 --todo something is still wrong with loading this, a ship that used to have three bars now has two (custom)
 local function InterfangilatorRemoveEffect(item, crewmem)
-    print("Removing effect", item.name, item.storedValue)
+    --print("Removing effect", item.name, item.storedValue)
     local targetShipManager = Hyperspace.ships(1 - crewmem.iShipId)
     local sourceSystem = item.system
     sourceSystem = lwl.setIfNil(sourceSystem, crewmem.currentSystem)--If we just loaded, item.system will be nil but the crew knows where it is.
     if sourceSystem and targetShipManager and item.storedValue then
         local targetSystem = targetShipManager:GetSystem(sourceSystem:GetId())
         if targetSystem then
-            print("if removing ", targetSystem.name, item.storedValue)
+            --print("if removing ", targetSystem.name, item.storedValue)
             targetSystem:UpgradeSystem(item.storedValue)
-            print("if upgraded system by ", item.storedValue)
+            --print("if upgraded system by ", item.storedValue)
             if targetSystem:CompletelyDestroyed() then
                 if item.previousDamage then
-                    targetSystem.healthState.first = targetSystem.healthState.second - item.previousDamage
+                    targetSystem.healthState.first = math.min(item.storedValue, targetSystem.healthState.second - item.previousDamage)
                 end
             end
         end
@@ -441,6 +442,11 @@ end
 local function VoidRing(item, crewmem)
     --todo Makes the wearer untargetable in combat, but unable to fight. (1.20)
 end
+
+
+
+
+
 --[[
 todo persist status effects on crew
 Torpor Projector
@@ -468,6 +474,9 @@ Blood is Mine, something else I forgot for art assets
 FTF Discette
 Right Eye of Argupel
 A collection of the latest tracks from backwater bombshell Futanari Titwhore Fiasco
+crew gets for each equiped crew
+equipped crew get for each equipment on them
+
 --]]--45 c cvgbhbhyh bbb
 cel.insertItemDefinition({name="Shredder Cuffs", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/SpikedCuffs.png"), description="Looking sharp.  Extra damage in melee.", onTick=ShredderCuffs, sellValue=3})
 cel.insertItemDefinition({name="Seal Head", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/SealHead.png"), description="The headbutts it enables are an effective counter to the ridicule you might encounter for wearing such odd headgear.", onTick=SealHead})
