@@ -24,6 +24,24 @@ Swankerpino
 Bing Chillin
 --]]
 
+
+
+
+-----------------------------------------HELPER FUNCTIONS---------------------------------
+
+---comment
+---@param item table
+---@param crewmem Hyperspace.CrewMember
+---@param doOnJump function Takes (item, crewmem)
+local function onJump(item, crewmem, doOnJump)
+    if item.jumping and not Hyperspace.ships(0).bJumping then
+        doOnJump(item, crewmem)
+    end
+    item.jumping = Hyperspace.ships(0).bJumping
+end
+
+
+
 ------------------------------------ITEM DEFINITIONS----------------------------------------------------------
 --Only the player can use items.
 -------------------SHREDDER CUFFS------------------
@@ -173,12 +191,13 @@ local function persistEgg(item, metaVarIndex)
     Hyperspace.metaVariables[KEY_EGG_VALUE..metaVarIndex] = item.sellValue
 end
 
+local function EggOnJump(item, crewmem)
+    item.sellValue = item.sellValue + 3
+    cel.persistEquipment()
+end
+
 local function Egg(item, crewmem)
-    if item.jumping and not Hyperspace.ships(0).bJumping then
-        item.sellValue = item.sellValue + 3
-        cel.persistEquipment()
-    end
-    item.jumping = Hyperspace.ships(0).bJumping
+    onJump(item, crewmem, EggOnJump)
 end
 -------------------Myocardial Overcharger------------------
 local function MyocardialOvercharger(item, crewmem) --todo this kind of sucks because these custom values don't persist, leading to _issues_.
@@ -201,7 +220,7 @@ local function MyocardialOverchargerRemove(item, crewmem)
 end
 -------------------Holy Symbol------------------
 local function HolySymbolRender()
-    local holySymbolIcons = {"holy_symbol_2.png", "holy_symbol_3.png"}
+    local holySymbolIcons = {"holy_symbol_1.png", "holy_symbol_2.png", "holy_symbol_3.png"}
     local chosenIcon = holySymbolIcons[math.random(1,#holySymbolIcons)]
     return lwui.spriteRenderFunction("items/"..chosenIcon)
 end
@@ -238,7 +257,7 @@ local function InterfangilatorApplyEffect(item, crewmem, value) --mostly checks 
             local beforePower = system:GetPowerCap()
             --print("before power", beforePower)
             item.previousDamage = system.healthState.second - system.healthState.first
-            system:UpgradeSystem(-value)
+            system:UpgradeSystem(-math.min(value, system.healthState.second))
             item.storedValue = beforePower - system:GetPowerCap()
             local targetPosition = targetShipManager:GetRoomCenter(system:GetRoomId())
             item.roomEffect = Brightness.create_particle("particles/Interfangilator", 1, 60, targetPosition, 0, targetShipManager.iShipId, "SHIP_MANAGER")
@@ -270,7 +289,7 @@ local function InterfangilatorRemoveEffect(item, crewmem)
             --print("if removing ", targetSystem.name, item.storedValue)
             targetSystem:UpgradeSystem(item.storedValue)
             --print("if upgraded system by ", item.storedValue)
-            if targetSystem:CompletelyDestroyed() then
+            if targetSystem:CompletelyDestroyed() then  
                 if item.previousDamage then
                     targetSystem.healthState.first = math.min(item.storedValue, targetSystem.healthState.second - item.previousDamage)
                 end
@@ -302,10 +321,10 @@ local function Interfangilator(item, crewmem)
         item.ready = false
     end
     item.system = crewmem.currentSystem
-    --[[if crewmem.currentSystem then
+    if crewmem.currentSystem then
         local healthState = crewmem.currentSystem.healthState
-        print("System health state is ", healthState.first, healthState.second)
-    end]]
+        --print("System health state is ", healthState.first, healthState.second)
+    end
 end
 
 local function InterfangilatorRemove(item, crewmem)
@@ -361,7 +380,7 @@ local function InternecionCube(item, crewmem)
         item.description = IC_on_TEXT
     end
     
-    item.value = item.value + (.24 / murderMultiplier)
+    item.value = item.value + (.24 + ((murderMultiplier - 1) / 3))
     if item.value > 100 then
         item.value = 0
         if crewmem.health.first < crewmem.health.second then
@@ -442,7 +461,130 @@ end
 local function VoidRing(item, crewmem)
     --todo Makes the wearer untargetable in combat, but unable to fight. (1.20)
 end
+-------------------Equinoid Tools------------------
+local LIST_CREW_PONY = {"pony", "pony_tamed", "easter_sunkist", "unique_jerry_pony", "ponyc",
+ "unique_jerry_pony_crystal", "pony_engi", "pony_engi_chaos", "pony_engi_nano", "pony_engi_nano_chaos", "fr_bonus_prince"}
 
+--if conditions are met, destroy these and replace them with their true versions.
+local YOUNG_DEPRESSEOR_NAME = "Strange Lump"
+local YOUNG_DEPRESSEOR_TRUE_NAME = "Young Depressor (DUD)"
+local SUN_PILE_NAME = "Knobbly Mound"
+local SUN_PILE_TRUE_NAME = "Sun Pile (DUD)"
+local MAW_SAWGE_NAME = "Toothy Plank"
+local MAW_SAWGE_TRUE_NAME = "Maw Sawge (DUD)"
+local PRONGLER_NAME = "Hookish Staff"
+local PRONGLER_TRUE_NAME = "Prongler (DUD)"
+
+local function equinoidCrewCondition()
+    local playerCrew = lwl.getAllMemberCrewFromFactory(lwl.filterOwnshipTrueCrew)
+    for _,crewmem in ipairs(playerCrew) do
+        for _,ponyRace in ipairs(LIST_CREW_PONY) do
+            if (crewmem.extend:GetDefinition().race == ponyRace) then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function itemTransform(condition, item, crewmem, newItemIndex)
+    if condition(item, crewmem) then
+        cel.deleteItem(item.containingButton, item)
+        gex_give_item(newItemIndex)
+    end
+end
+
+local function equinoidToolsOnJump(item, crewmem, trueName)
+    itemTransform(equinoidCrewCondition, item, crewmem, cel.mNameToItemIndexTable[trueName])
+end
+
+local function StrangeLumpOnJump(item, crewmem)
+    itemTransform(equinoidCrewCondition, item, crewmem, cel.mNameToItemIndexTable[YOUNG_DEPRESSEOR_TRUE_NAME])
+end
+
+local function KnobblyMoundOnJump(item, crewmem)
+    itemTransform(equinoidCrewCondition, item, crewmem, cel.mNameToItemIndexTable[SUN_PILE_TRUE_NAME])
+end
+
+local function ToothyPlankOnJump(item, crewmem)
+    itemTransform(equinoidCrewCondition, item, crewmem, cel.mNameToItemIndexTable[MAW_SAWGE_TRUE_NAME])
+end
+
+local function HookishStaffOnJump(item, crewmem)
+    itemTransform(equinoidCrewCondition, item, crewmem, cel.mNameToItemIndexTable[PRONGLER_TRUE_NAME])
+end
+
+local function StrangeLumpEquip(item, crewmem)
+    StrangeLumpOnJump(item, crewmem)
+end
+
+local function KnobblyMoundEquip(item, crewmem)
+    KnobblyMoundOnJump(item, crewmem)
+end
+
+local function ToothyPlankEquip(item, crewmem)
+    ToothyPlankOnJump(item, crewmem)
+end
+
+local function HookishStaffEquip(item, crewmem)
+    HookishStaffOnJump(item, crewmem)
+end
+
+local function StrangeLump(item, crewmem)
+    onJump(item, crewmem, StrangeLumpOnJump)
+end
+
+local function KnobblyMound(item, crewmem)
+    onJump(item, crewmem, KnobblyMoundOnJump)
+end
+
+local function ToothyPlank(item, crewmem)
+    onJump(item, crewmem, ToothyPlankOnJump)
+end
+
+local function HookishStaff(item, crewmem)
+    onJump(item, crewmem, HookishStaffOnJump)
+end
+
+local YOUNG_DEPRESSEOR_SPRITE = "items/equinoid_tools_1.png"
+local SUN_PILE_SPRITE = "items/equinoid_tools_2.png"
+local MAW_SAWGE_PRITE = "items/equinoid_tools_4.png"
+local PRONGLER_SPRITE = "items/equinoid_tools_3.png"
+
+local STRANGE_LUMP_DESCRIPTION = "Its power is exceeded only by its mystery."
+local KNOBBLY_MOUND_DESCRIPTION = "Its mystery is exceeded only by its power."
+local TOOTHY_PLANK_DESCRIPTION = "A menagerie of twisty little protrusions, all different."
+local HOOKISH_STAFF_DESCRIPTION = "It could be something like a coatrack, if you planted coatracks in the ground.  Or hung them from trees."
+
+local YOUNG_DEPRESSEOR_DESCRIPTION = "Placed on rambunctious foals to calm them down."
+local SUN_PILE_DESCRIPTION = "Absorbs sunlight and gets really hot.  Also tells time poorly."
+local MAW_SAWGE_DESCRIPTION = "A nice treat after a long day on your hooves, the Maw Sawge allows equinoids to apply pressure to hard-to-reach spots."
+local PRONGLER_DESCRIPTION = "Get prongled."
+
+--todo mechanics for the tools.
+
+local STRANGE_LUMP_DEFINITION = {name=YOUNG_DEPRESSEOR_NAME, itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction(YOUNG_DEPRESSEOR_SPRITE), description=STRANGE_LUMP_DESCRIPTION, onEquip=StrangeLumpEquip, onTick=StrangeLump, sellValue=3, secret=true}
+local KNOBBLY_MOUND_DEFINITION = {name=SUN_PILE_NAME, itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction(SUN_PILE_SPRITE), description=KNOBBLY_MOUND_DESCRIPTION, onEquip=KnobblyMoundEquip, onTick=KnobblyMound, sellValue=3, secret=true}
+local TOOTHY_PLANK_DEFINITION = {name=MAW_SAWGE_NAME, itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction(MAW_SAWGE_PRITE), description=TOOTHY_PLANK_DESCRIPTION, onEquip=ToothyPlankEquip, onTick=ToothyPlank, sellValue=3, secret=true}
+local HOOKISH_STAFF_DEFINITION = {name=PRONGLER_NAME, itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction(PRONGLER_SPRITE), description=HOOKISH_STAFF_DESCRIPTION, onEquip=HookishStaffEquip, onTick=HookishStaff, sellValue=3, secret=true}
+
+
+local YOUNG_DEPRESSEOR_DEFINITION = {name=YOUNG_DEPRESSEOR_TRUE_NAME, itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction(YOUNG_DEPRESSEOR_SPRITE), description=YOUNG_DEPRESSEOR_DESCRIPTION, secret=true}
+local SUN_PILE_DEFINITION = {name=SUN_PILE_TRUE_NAME, itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction(SUN_PILE_SPRITE), description=SUN_PILE_DESCRIPTION, secret=true}
+local MAW_SAWGE_DEFINITION = {name=MAW_SAWGE_TRUE_NAME, itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction(MAW_SAWGE_PRITE), description=MAW_SAWGE_DESCRIPTION, secret=true}
+local PRONGLER_DEFINITION = {name=PRONGLER_TRUE_NAME, itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction(PRONGLER_SPRITE), description=PRONGLER_DESCRIPTION, secret=true}
+
+
+--A fake object that represents four other objects.
+local EQUINOID_TOOLS_NAME = "a set of strange objects"
+local function EquinoidToolsCreate(item)
+    gex_give_item(cel.mNameToItemIndexTable[YOUNG_DEPRESSEOR_NAME])
+    gex_give_item(cel.mNameToItemIndexTable[SUN_PILE_NAME])
+    gex_give_item(cel.mNameToItemIndexTable[MAW_SAWGE_NAME])
+    gex_give_item(cel.mNameToItemIndexTable[PRONGLER_NAME])
+    cel.deleteItem(item.button, item)
+end
+local EQUINOID_TOOLS_DEFINITION = {name=EQUINOID_TOOLS_NAME, onCreate=EquinoidToolsCreate}
 
 
 
@@ -466,7 +608,7 @@ A fun thing might look at how many effects are on a given crew.  It should be ea
 Galpegar
 Noctus
 The Thunderskin  --Crew cannot fight and gains 100 (double?) health. When in a room with injured allies, bleeds profusely and heals them.  Needs statboost for the cannot fight probably.
-Sthenic Venom
+The Sun in Rags
 A cursed item that autoequips
 Item that get stronger the more items you sell.
 --todo item onLoad onPersist methods for things that need to save stuff
@@ -476,6 +618,18 @@ Right Eye of Argupel
 A collection of the latest tracks from backwater bombshell Futanari Titwhore Fiasco
 crew gets for each equiped crew
 equipped crew get for each equipment on them
+living bomb
+Violent Artist
+
+Item: User Manual
+    Creates one of several user manuals on create, destroys itself.  These are tools that give the user one extra level of skill, statbuff needed.
+
+Giftbox
+
+Prongler: slows enemy crew in same room
+Sun Pile: 
+Young Depressor: Crew gains MC immunity.
+Maw Sawge: boosts regen rate of friendly crew in room (1.20)
 
 --]]--45 c cvgbhbhyh bbb
 cel.insertItemDefinition({name="Shredder Cuffs", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/SpikedCuffs.png"), description="Looking sharp.  Extra damage in melee.", onTick=ShredderCuffs, sellValue=3})
@@ -489,11 +643,11 @@ cel.insertItemDefinition({name="Orgainc Impulse Grafts (DUD)", itemType=TYPE_ARM
 cel.insertItemDefinition({name="Testing Status Tool", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/Untitled.png"), description="ALL OF THEM!!!  A complicated-looking device that inflicts its wearer with all manner of ill effects.  Thankfully, someone else wants it more than you do.", onTick=statusTest, onEquip=statusTestEquip, onRemove=statusTestRemove, sellValue=15})
 cel.insertItemDefinition({name="Omelas Generator", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/leaves_of_good_fortune.png"), description="Power, at any cost.  Equiped crew adds four ship power but slowly stacks corruption.", onTick=OmelasGenerator, onEquip=OmelasGeneratorEquip, onRemove=OmelasGeneratorRemove})
 cel.insertItemDefinition({name="Ferrogenic Exsanguinator", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/grafted.png"), description="'The machine god requires a sacrifice of blood, and I give it gladly.'  Biomechanical tendrils wrap around this crew, extracting their life force to hasten repairs.", onTick=FerrogenicExsanguinator})
-cel.insertItemDefinition({name="Egg", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/egg.png"), description="Gains 3 sell value each jump.", onTick=Egg, onLoad=loadEgg, onPersist=persistEgg, sellValue=0})
+cel.insertItemDefinition({name="Egg", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/egg.png"), description="Gains 3 sell value at the end of the round.", onTick=Egg, onLoad=loadEgg, onPersist=persistEgg, sellValue=0})
 cel.insertItemDefinition({name="Myocardial Overcharger (DUD)", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/brain_gang.png"), description="Grows in power with each item sold.", onTick=MyocardialOvercharger, onEquip=MyocardialOverchargerEquip, onRemove=MyocardialOverchargerRemove})
 cel.insertItemDefinition({name="Holy Symbol", itemType=TYPE_WEAPON, renderFunction=HolySymbolRender(), description="Renders its wearer nigh impervious to corruption (Not the DD kind).", onEquip=HolySymbolEquip, onRemove=HolySymbolRemove, sellValue=10})
-cel.insertItemDefinition({name="Interfangilator", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/detector.png"), description="Attaches to the frequency signatures of matching enemy system rooms and inhibits them, reducing them by a bar.", onTick=Interfangilator, onRemove=InterfangilatorRemove, onLoad=InterfangilatorLoad, onPersist=InterfangilatorPersist})
-cel.insertItemDefinition({name="Custom Interfangilator", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/custom_detector.png"), description="Their expertise becomes their sword, and enemy systems fall. An aftermarket model which scales based on the crew's skill level with the current system.", onTick=CustomInterfangilator, onRemove=InterfangilatorRemove, onLoad=InterfangilatorLoad, onPersist=InterfangilatorPersist})
+cel.insertItemDefinition({name="Interfangilator", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/detector.png"), description="Attaches to the frequency signatures of matching enemy system rooms and inhibits them, reducing them by a bar.", onRender=Interfangilator, onRemove=InterfangilatorRemove, onLoad=InterfangilatorLoad, onPersist=InterfangilatorPersist})
+cel.insertItemDefinition({name="Custom Interfangilator", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/custom_detector.png"), description="Their expertise becomes their sword, and enemy systems fall. An aftermarket model which scales based on the crew's skill level with the current system.", onRender=CustomInterfangilator, onRemove=InterfangilatorRemove, onLoad=InterfangilatorLoad, onPersist=InterfangilatorPersist})
 cel.insertItemDefinition({name="Compactifier (DUD)", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/decrepit paper.png"), description="Nearly illegible documents stating that this crew 'Doesn't count'.", onEquip=CompactifierEquip, onRemove=CompactifierRemove})
 cel.insertItemDefinition({name="Internecion Cube", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/internecion_cube.png"), description=IC_on_TEXT, onEquip=InternecionCubeEquip, onTick=InternecionCube})
 cel.insertItemDefinition(PGO_DEFINITION)
@@ -501,7 +655,21 @@ cel.insertItemDefinition(THREE_PGO_DEFINITION)
 cel.insertItemDefinition({name="Thief's Hand", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/thiefs_hand.png"), description=THIEFS_HAND_DESCRIPTION_DORMANT, onEquip=ThiefsHandEquip, onTick=ThiefsHand})
 cel.insertItemDefinition({name=VOID_RING_NAME, itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/ring_of_void.png"), description="More than it seems.  Equipped crew can't fight or be targeted in combat.", onEquip=VoidRingEquip, onTick=VoidRing})
 cel.insertItemDefinition({name=AWOKEN_THIEFS_HAND_NAME, itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/awoken_rogues_hand.png"), description=AWOKEN_THIEFS_HAND_DESCRIPTION, onTick=AwokenThiefsHand, sellValue=13, secret=true})
+cel.insertItemDefinition(STRANGE_LUMP_DEFINITION)
+cel.insertItemDefinition(KNOBBLY_MOUND_DEFINITION)
+cel.insertItemDefinition(TOOTHY_PLANK_DEFINITION)
+cel.insertItemDefinition(HOOKISH_STAFF_DEFINITION)
+cel.insertItemDefinition(YOUNG_DEPRESSEOR_DEFINITION)
+cel.insertItemDefinition(SUN_PILE_DEFINITION)
+cel.insertItemDefinition(MAW_SAWGE_DEFINITION)
+cel.insertItemDefinition(PRONGLER_DEFINITION)
+cel.insertItemDefinition(EQUINOID_TOOLS_DEFINITION)
+
 --print("numequips after", #mEquipmentGenerationTable)
+
+
+
+
 
 ------------------------------------END ITEM DEFINITIONS----------------------------------------------------------
 --todo doesn't work with anything that has multiple possible results.
