@@ -314,9 +314,13 @@ local function Interfangilator(item, crewmem)
     end
 
     --print("if checking", item.ready, item.system ~= crewmem.currentSystem)
-    if item.ready or ((item.system ~= crewmem.currentSystem))then
+    if item.ready or ((item.system ~= crewmem.currentSystem))then --todo if ready should not remove effect.
         --print("IFID is now ", crewmem.iManningId)
-        InterfangilatorRemoveEffect(item, crewmem)
+        if not item.ready then
+            InterfangilatorRemoveEffect(item, crewmem)
+        else
+            removeRoomEffect(item)
+        end
         InterfangilatorApplyEffect(item, crewmem, 1)
         item.ready = false
     end
@@ -344,7 +348,11 @@ local function CustomInterfangilator(item, crewmem) --todo misbehaves if crew sk
     
     if item.ready or ((item.system ~= crewmem.currentSystem)) then
         item.storedValue = lwl.setIfNil(item.storedValue, CustomInterfangilatorLevel(crewmem))
-        InterfangilatorRemoveEffect(item, crewmem)
+        if not item.ready then
+            InterfangilatorRemoveEffect(item, crewmem)
+        else
+            removeRoomEffect(item)
+        end
         InterfangilatorApplyEffect(item, crewmem, CustomInterfangilatorLevel(crewmem))
         item.ready = false
     end
@@ -410,7 +418,7 @@ local THREE_PGO_DEFINITION = {name=THREE_PGO_NAME, itemType=TYPE_TOOL, renderFun
     description=PGO_DESCRIPTION, onCreate=PerfectlyGenericObjectCreate}
 -- a small chance each jump to spawn another?  No, that will be a different thing.  Then more things that care about the number of things you have.
 -------------------Awoken Thief's Hand------------------
-local AWOKEN_THIEFS_HAND_DESCRIPTION = "Said to once belong to the greatest thief in the multiverse, this disembodied hand has the ability to steal from space itself!  Empowered by the ring', it draws even the most obscure whatsits into existence."
+local AWOKEN_THIEFS_HAND_DESCRIPTION = "Said to once belong to the greatest thief in the multiverse, this disembodied hand has the ability to steal from space itself!  Empowered by the ring, it draws even the most obscure whatsits into existence."
 local AWOKEN_THIEFS_HAND_NAME = "Awoken Rogue's Hand"
 
 local function AwokenThiefsHand(item, crewmem)
