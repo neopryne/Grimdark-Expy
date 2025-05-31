@@ -302,33 +302,32 @@ local function InterfangilatorRemoveEffect(item, crewmem)
     end
 end
 
-local function Interfangilator(item, crewmem)
-    if item.jumping and not Hyperspace.ships(0).bJumping then
+local function InterfangilatorCommonCore(item, crewmem, strength)
+    onJump(item, crewmem, function (item, crewmem)
         item.ready = true
         item.systemId = nil
-    end
-    item.jumping = Hyperspace.ships(0).bJumping
-    
+    end)
+
     if (not Hyperspace.ships.enemy) or Hyperspace.ships.enemy.bDestroyed then --todo clean up this logic
         removeRoomEffect(item)
     end
 
-    --print("if checking", item.ready, item.system ~= crewmem.currentSystem)
-    if item.ready or ((item.system ~= crewmem.currentSystem))then --todo if ready should not remove effect.
-        --print("IFID is now ", crewmem.iManningId)
+    if item.ready or ((item.system ~= crewmem.currentSystem)) then
+        item.storedValue = lwl.setIfNil(item.storedValue, strength)
         if not item.ready then
             InterfangilatorRemoveEffect(item, crewmem)
         else
             removeRoomEffect(item)
         end
-        InterfangilatorApplyEffect(item, crewmem, 1)
+        InterfangilatorApplyEffect(item, crewmem, strength)
         item.ready = false
     end
     item.system = crewmem.currentSystem
-    if crewmem.currentSystem then
-        local healthState = crewmem.currentSystem.healthState
-        --print("System health state is ", healthState.first, healthState.second)
-    end
+end
+
+
+local function Interfangilator(item, crewmem)
+    InterfangilatorCommonCore(item, crewmem, 1)
 end
 
 local function InterfangilatorRemove(item, crewmem)
@@ -341,22 +340,7 @@ local function CustomInterfangilatorLevel(crewmem)
 end
 
 local function CustomInterfangilator(item, crewmem) --todo misbehaves if crew skilled up while active, but that happens like twice.
-    if item.jumping and not Hyperspace.ships(0).bJumping then
-        item.ready = true
-    end
-    item.jumping = Hyperspace.ships(0).bJumping
-    
-    if item.ready or ((item.system ~= crewmem.currentSystem)) then
-        item.storedValue = lwl.setIfNil(item.storedValue, CustomInterfangilatorLevel(crewmem))
-        if not item.ready then
-            InterfangilatorRemoveEffect(item, crewmem)
-        else
-            removeRoomEffect(item)
-        end
-        InterfangilatorApplyEffect(item, crewmem, CustomInterfangilatorLevel(crewmem))
-        item.ready = false
-    end
-    item.system = crewmem.currentSystem
+    InterfangilatorCommonCore(item, crewmem, CustomInterfangilatorLevel(crewmem))
 end
 -------------------Compactifier------------------
 local function CompactifierEquip(item, crewmem) --needs stat boost 1.20
