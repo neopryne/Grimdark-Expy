@@ -5,6 +5,8 @@ local lwsb = mods.lightweight_statboosts
 local lwce = mods.lightweight_crew_effects
 local cel = mods.crew_equipment_library
 local Brightness = mods.brightness
+local get_room_at_location = mods.multiverse.get_room_at_location
+local userdata_table = mods.multiverse.userdata_table
 
 --As library, needs to reject things with duplicate names, pop error. lib in lwl, GEXPy uses lib and adds the items.
 --I probably need to hash out custom persist stuff first.
@@ -41,6 +43,11 @@ local function onJump(item, crewmem, doOnJump)
 end
 
 
+local function getTickSize(item, crewmem, baseValue)
+    local crewTable = userdata_table(crewmem, "mods.gex.crew_modifiers")
+    crewTable.tickMult = lwl.setIfNil(crewTable.tickMult, 1)
+    return baseValue * crewTable.tickMult
+end
 
 ------------------------------------ITEM DEFINITIONS----------------------------------------------------------
 --Only the player can use items.
@@ -51,7 +58,7 @@ local function ShredderCuffs(item, crewmem)
         local foeShipManager = Hyperspace.ships(1)
         foes_at_point = lwl.get_ship_crew_point(ownshipManager, foeShipManager, crewmem.x, crewmem.y)
         for _,foe in ipairs(foes_at_point) do
-            foe:DirectModifyHealth(-.05)
+            foe:DirectModifyHealth(getTickSize(item, crewmem, -.05))
         end
     end
 end
@@ -61,7 +68,7 @@ local function SealHead(item, crewmem)
         item.stunCounter = 0
     end
     if crewmem.bFighting and crewmem.bSharedSpot then
-        item.stunCounter = item.stunCounter + .005
+        item.stunCounter = item.stunCounter + getTickSize(item, crewmem, .005)
         if (item.stunCounter > 1) then
             item.stunCounter = 0
             local ownshipManager = Hyperspace.ships(0)
@@ -99,7 +106,7 @@ local function ChicagoTypewriterRemove(item, crewmem)
 end
 -------------------BALLANCEATOR------------------
 local function Ballanceator(item, crewmem)
-    local dpt = .085
+    local dpt = getTickSize(item, crewmem, .185)
     if (crewmem:GetIntegerHealth() > crewmem:GetMaxHealth() / 2) then
         crewmem:DirectModifyHealth(-dpt)
     else
@@ -112,7 +119,7 @@ local function HellionHalberd(item, crewmem)
         --foes_at_point = lwl.get_ship_crew_point(ownshipManager, foeShipManager, crewmem.x, crewmem.y) --coords are relative to the first manager.
         --foes_at_point = lwl.getFoesAtPoint(crewmem, crewmem.x, crewmem.y) --this is actually harder to implement as it involves converting points in mainspace to one of the ships.
         for _,foe in ipairs(lwl.getFoesAtSelf(crewmem)) do
-            lwce.applyBleed(foe, 21)--per tick  todo sometimes doesn't work.  also statuses sometimes don't teleport right.  Applying to enemy crew seems to not work now.
+            lwce.applyBleed(foe, getTickSize(item, crewmem, 21))
         end
     end
 end
@@ -143,12 +150,14 @@ end
 local function statusTestEquip(item, crewmem)
     lwce.applyBleed(crewmem, 3)
     lwce.applyConfusion(crewmem, 3)
+    lwce.applyTeleportitis(crewmem, 3)
     --print("Applying corruption!")
     lwce.applyCorruption(crewmem, .2)
 end
 local function statusTest(item, crewmem)
-    lwce.applyBleed(crewmem, 1)
-    lwce.applyConfusion(crewmem, 1)
+    lwce.applyBleed(crewmem, getTickSize(item, crewmem, 1))
+    lwce.applyConfusion(crewmem, getTickSize(item, crewmem, 1))
+    lwce.applyTeleportitis(crewmem, getTickSize(item, crewmem, 1))
     --lwce.applyCorruption(crewmem, .1)
 end
 local function statusTestRemove(item, crewmem)
@@ -162,7 +171,7 @@ local function OmelasGeneratorEquip(item, crewmem) --mAYBE MAKE THIS CURSED.  Al
 end
 
 local function OmelasGenerator(item, crewmem)
-    lwce.applyCorruption(crewmem, .006)
+    lwce.applyCorruption(crewmem, getTickSize(item, crewmem, .006))
 end
 
 local function OmelasGeneratorRemove(item, crewmem)
@@ -176,8 +185,8 @@ local function FerrogenicExsanguinator(item, crewmem)
         local currentShipManager = Hyperspace.ships(crewmem.currentShipId)
         local systemId = crewmem.iManningId
         local system = currentShipManager:GetSystem(systemId)
-        system:PartialRepair(12.5, false)
-        lwce.applyBleed(crewmem, 3.2)
+        system:PartialRepair(getTickSize(item, crewmem, 12.5), false)
+        lwce.applyBleed(crewmem, getTickSize(item, crewmem, 3.2))
     end
 end
 -------------------Egg------------------  --Any internal status, beyond just is this thing equipped, needs a custom persist/load to handle that.
@@ -193,7 +202,7 @@ local function persistEgg(item, metaVarIndex)
 end
 
 local function EggOnJump(item, crewmem)
-    item.sellValue = item.sellValue + 3
+    item.sellValue = item.sellValue + getTickSize(item, crewmem, 3)
     cel.persistEquipment()
 end
 
@@ -373,7 +382,7 @@ local function InternecionCube(item, crewmem)
         item.description = IC_on_TEXT
     end
     
-    item.value = item.value + (.24 + ((murderMultiplier - 1) / 3))
+    item.value = item.value + getTickSize(item, crewmem, (.24 + ((murderMultiplier - 1) / 3)))
     if item.value > 100 then
         item.value = 0
         if crewmem.health.first < crewmem.health.second then
@@ -383,19 +392,21 @@ local function InternecionCube(item, crewmem)
     end
 
     if crewmem.bFighting then
-        lwl.damageEnemyCrewInSameRoom(crewmem, .07 * murderMultiplier, 0) --lwl might have issues if crew tag along after a jump todo fix?
+        lwl.damageEnemyCrewInSameRoom(crewmem, getTickSize(item, crewmem,.07 * murderMultiplier), 0) --lwl might have issues if crew tag along after a jump todo fix?
         --todo damage everyone, increase heal.
     end
 end
 -------------------P.G.O------------------
 local PGO_NAME = "Perfectly Generic Object"
-local THREE_PGO_NAME = "Perfectly Generic Object " --names need to be unique for the name to id table to work
+local THREE_PGO_NAME = "a collection of little green cubes" --names need to be unique for the name to id table to work
 local PGO_DESCRIPTION = "There's not much to say about this little green cube."
 local PGO_SPRITE = "items/pgo.png"
 
 local function PerfectlyGenericObjectCreate(item)
     gex_give_item(cel.mNameToItemIndexTable[PGO_NAME])
     gex_give_item(cel.mNameToItemIndexTable[PGO_NAME])
+    gex_give_item(cel.mNameToItemIndexTable[PGO_NAME])
+    cel.deleteItem(item.button, item)
 end
 
 local PGO_DEFINITION = {name=PGO_NAME, itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction(PGO_SPRITE), description=PGO_DESCRIPTION, secret=true}
@@ -579,19 +590,150 @@ local function EquinoidToolsCreate(item)
 end
 local EQUINOID_TOOLS_DEFINITION = {name=EQUINOID_TOOLS_NAME, onCreate=EquinoidToolsCreate}
 
+-------------------Volatile Hypercells------------------
+
+local function generateHypercellCrewList()
+    return {"pony", "pony_engi"} --todo scrape the correct lists, or all crew types.
+end
+local HypercellCrewList = generateHypercellCrewList()
+
+local function VolatileHypercells(item, crewmem)
+    if (crewmem.health.first <= 0.1) then
+        crewmem.bDead = false
+        crewmem.health.first = 100
+        local newType = HypercellCrewList[math.random(1, #HypercellCrewList)]
+        local transformRace = Hyperspace.StatBoostDefinition()
+        transformRace.stat = Hyperspace.CrewStat.TRANSFORM_RACE
+        transformRace.stringValue = newType
+        transformRace.value = true
+        transformRace.cloneClear = false
+        transformRace.jumpClear = false
+        transformRace.boostType = Hyperspace.StatBoostDefinition_BoostType_SET
+        transformRace.boostSource = Hyperspace.StatBoostDefinition_BoostSource_AUGMENT
+        transformRace.shipTarget = Hyperspace.StatBoostDefinition.ShipTarget.ALL
+        transformRace.crewTarget = Hyperspace.StatBoostDefinition.CrewTarget.ALL
+        Hyperspace.StatBoostManager.GetInstance():CreateTimedAugmentBoost(Hyperspace.StatBoost(transformRace), crewmem)
+        Hyperspace.Sounds:PlaySoundMix("gex_cell_revive", 4, false)
+        Hyperspace.Sounds:PlaySoundMix("gex_vial_break", 4, false)
+        cel.deleteItem(item.button, item)
+    end
+end
+
+--Ascendant Hypercells
+--Chaotic Hypercells
+-------------------Displacer Mace------------------
+local GENERIC_DISPLACER_MACE_NAME = "mace with intricate aether circuits"
+local DISPLACER_MACE_NAME = "Displacer Mace"
+local CHAOTIC_DISPLACER_MACE_NAME = "Chaotic Displacer Mace"
+
+local DISPLACER_MACE_TICK = .72
+--I could create custom effect like things that 
+
+local function DisplacerMaceCreate(item)
+    if (math.random(1,2) == 1) then
+        gex_give_item(cel.mNameToItemIndexTable[CHAOTIC_DISPLACER_MACE_NAME])
+    else
+        gex_give_item(cel.mNameToItemIndexTable[DISPLACER_MACE_NAME])
+    end
+    cel.deleteItem(item.button, item)
+end
+
+---maybe put in lwl if I end up liking this.
+---@param crewmem Hyperspace.CrewMember
+---@param validDestinations table of valid target ship ids
+local function displaceCrew(crewmem, validDestinations)
+    local shipId = validDestinations[math.random(#validDestinations)]
+    if not Hyperspace.ships.enemy then
+        shipId = 0
+    end
+    local shipManager = Hyperspace.ships(shipId)
+    local newPoint = lwl.pointfToPoint(shipManager:GetRandomRoomCenter())
+    local newRoom = get_room_at_location(shipManager, newPoint, false)
+    local newSlot = lwl.randomSlotRoom(newRoom, shipManager.iShipId)
+    print("Teleporting", crewmem:GetName(), "to", newRoom, newSlot)
+    crewmem.extend:InitiateTeleport(shipManager.iShipId, newRoom, newSlot)
+    Hyperspace.Sounds:PlaySoundMix("teleport", 9, false)
+end
+
+local function DisplacerMaceGeneric(item, crewmem, validDestinations)
+    --Get a random enemy in combat in the same room
+    if crewmem.bFighting and crewmem.health.first >= 0.1 then
+        item.value = item.value + getTickSize(item, crewmem, DISPLACER_MACE_TICK)
+        print("Mace", item.value)
+        if item.value > 100 then
+            item.value = 0
+            local enemyCrewSameRoom = lwl.getSameRoomCrew(crewmem, lwl.generateOpposingCrewFilter(crewmem))
+            --choose one at random to displace.
+            if #enemyCrewSameRoom > 1 then error("GEX Displacer Mace -- Fighting nothing!") end
+            local chosenFoe = enemyCrewSameRoom[math.random(#enemyCrewSameRoom)]
+            print("Displacing", chosenFoe:GetName())
+            displaceCrew(chosenFoe, validDestinations)
+        end
+    end
+end
+
+local function DisplacerMaceEquip(item, crewmem)
+    item.value = 0
+end
+
+local function DisplacerMace(item, crewmem)
+    DisplacerMaceGeneric(item, crewmem, {crewmem.currentShipId})
+end
+
+local function ChaoticDisplacerMace(item, crewmem)
+    DisplacerMaceGeneric(item, crewmem, {0,1})
+end
+
+local GENERIC_DISPLACER_MACE_DEFINITION = {name=GENERIC_DISPLACER_MACE_NAME, onCreate=DisplacerMaceCreate}
+local DISPLACER_MACE_DEFINITION = {name=DISPLACER_MACE_NAME, itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/displacer_mace.png"), description="A futuristic design that looks heavier than it feels.  Banishes enemy crew to other parts of the ship.",  onEquip=DisplacerMaceEquip, onTick=DisplacerMace, secret=true}
+local CHAOTIC_DISPLACER_MACE_DEFINITION = {name=CHAOTIC_DISPLACER_MACE_NAME, itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/displacer_mace_chaotic.png"), description="A futuristic design that looks heavier than it feels.  Banishes enemy crew to other parts of the ship.  The chaotic version can shunt victems off of the current ship.",  onEquip=DisplacerMaceEquip, onTick=ChaoticDisplacerMace, secret=true}
+-------------------Overcloaker------------------
+local function OvercloakerEquip(item, crewmem)
+    local crewTable = userdata_table(crewmem, "mods.gex.crew_modifiers")
+    crewTable.tickMult = lwl.setIfNil(crewTable.tickMult, 1)
+    crewTable.tickMult = crewTable.tickMult + .5
+end
+
+local function OvercloakerRemove(item, crewmem)
+    local crewTable = userdata_table(crewmem, "mods.gex.crew_modifiers")
+    crewTable.tickMult = lwl.setIfNil(crewTable.tickMult, 1)
+    crewTable.tickMult = crewTable.tickMult - .5
+end
+
+
 
 
 
 --[[
+effects: teleportitis (foes only, this is a pain)
+        slimed? (slow, reduce damage given)
+        polymorphitis
+        heartache?
+
+Volatile Hypercells: uses 
+--how to get dynamic list of all crew types in the game
+Upon reaching 0 hp, consume this item to regenerate as a random race.
+LIST_CREW_ALL_CRAPBUCKET union
+Normal item: Hypercell Selector
+Chaotic Hypercells --Uses LIST_CREW_UNIQUE_CRAPBUCKET or LIST_CREW_ALL_CRAPBUCKET
+Super chaos: Uses every race, even the summons.
+
+
+Items that make themselves not secret when the correct addons are installed:
+    Spell Jam
+    This refreshing snack allows an additional use of any equipped spells.
+    (actually just gives vampweed cultists an additional charge to all abilities.)
+A crew that has a list of all crew they've killed, and will transform into them upon death.
+
 todo persist status effects on crew
 Torpor Projector 
 Determination -- Getting hit charges your abilities.
-Inflatable muscles -- while about 1/3 health, extra damage
-Medbot Injector -- Health recharge passive
+Inflatable muscles -- armor while about 1/3 health, extra damage
+Medbot Injector -- armor, Health recharge passive
 I guess I need status definitions so people know what they do.  Bleed is easy, the others less so.
 
+Cursed equipment that turns your crew into a lump of rocks. \hj
 Interface Scrambler -- Removes manning bonus from all enemy systems and prevents them from being manned.
-Purple Thang -- censored, inflicts confusion.
     Or like, corruption% chance you don't revive.  5 corruption is already kind of a lot of damage.
 Holy Symbol: [hand grenade, (), hl2 logo, random objects]
 Scrap Harm: Scrap gain increased by 10%, but gaining scrap makes crew bleed and go crazy. (automate)
@@ -599,7 +741,7 @@ A fun thing might look at how many effects are on a given crew.  It should be ea
   30% system resist to the room you're in
 Galpegar
 Noctus
-The Thunderskin  --Crew cannot fight and gains 100 (double?) health. When in a room with injured allies, bleeds profusely and heals them.  Needs statboost for the cannot fight probably.
+The Thunderskin  --Crew cannot fight and gains 100 health. When in a room with injured allies, bleeds profusely and heals them.  Needs statboost for the cannot fight probably.
 The Sun in Rags
 A cursed item that autoequips
 Item that get stronger the more items you sell.
@@ -612,6 +754,13 @@ crew gets for each equiped crew
 equipped crew get for each equipment on them
 living bomb
 Violent Artist
+Besplator
+Displacer Mace (spawns one)
+    Normal:same ship
+    Chaotic: any ship
+I need a number for how many ticks are in a second.
+Items just generally tick faster (armor)
+Overclocker -- +movespeed (dud), faster item rate on equipped guy.
 
 Item: User Manual
     Creates one of several user manuals on create, destroys itself.  These are tools that give the user one extra level of skill, statbuff needed.
@@ -621,9 +770,12 @@ An item that stacks with itself when you place it on itself... Render func's goi
 Maybe it gets brighter each level?  A thing that you feed other things to power it up...
 
 Prongler: slows enemy crew in same room
-Sun Pile: 
+Sun Pile: tool, 2x door break speed
 Young Depressor: Crew gains MC immunity.
 Maw Sawge: boosts regen rate of friendly crew in room (1.20)
+
+using userdata tables for the things that go on characters.
+
 
 --]]--45 c cvgbhbhyh bbb
 cel.insertItemDefinition({name="Shredder Cuffs", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/SpikedCuffs.png"), description="Looking sharp.  Extra damage in melee.", onTick=ShredderCuffs, sellValue=3})
@@ -658,7 +810,11 @@ cel.insertItemDefinition(SUN_PILE_DEFINITION)
 cel.insertItemDefinition(MAW_SAWGE_DEFINITION)
 cel.insertItemDefinition(PRONGLER_DEFINITION)
 cel.insertItemDefinition(EQUINOID_TOOLS_DEFINITION)
-
+cel.insertItemDefinition({name="Volatile Hypercells", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/hypercells.png"), description="This vial of hyperactive growth substrate shatters on death, regenerating its holder as a random race.", onRender=VolatileHypercells})
+cel.insertItemDefinition(GENERIC_DISPLACER_MACE_DEFINITION)
+cel.insertItemDefinition(DISPLACER_MACE_DEFINITION)
+cel.insertItemDefinition(CHAOTIC_DISPLACER_MACE_DEFINITION)
+cel.insertItemDefinition({name="Overcloaker", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/overcloaker.png"), description="The supercharged fabric of this cloak fills the space around you with potential, drawing out the latent capabilities of your gear.  Other equipped items on this crew tick at 1.5x speed.", onEquip=OvercloakerEquip, onRemove=OvercloakerRemove})
 --print("numequips after", #mEquipmentGenerationTable)
 
 
