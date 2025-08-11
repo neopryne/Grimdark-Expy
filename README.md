@@ -8,4 +8,4 @@ Thanks to Nai for help with equipment icons!
 
 ### Requirements:
 [Brightness Particles](https://ftlmultiverse.boards.net/thread/109/library-brightness-particles) 1.4+
-[Lightweight Lua](https://github.com/neopryne/lightweight-lua) 0.n+
+[Lightweight Lua](https://github.com/neopryne/lightweight-lua) 0.11+
