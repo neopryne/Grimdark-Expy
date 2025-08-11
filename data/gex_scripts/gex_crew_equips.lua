@@ -717,7 +717,7 @@ local function displaceCrew(crewmem, validDestinations)
     local newPoint = lwl.pointfToPoint(shipManager:GetRandomRoomCenter())
     local newRoom = get_room_at_location(shipManager, newPoint, false)
     local newSlot = lwl.randomSlotRoom(newRoom, shipManager.iShipId)
-    print("Teleporting", crewmem:GetName(), "to", newRoom, newSlot)
+    --print("Teleporting", crewmem:GetName(), "to", newRoom, newSlot)
     crewmem.extend:InitiateTeleport(shipManager.iShipId, newRoom, newSlot)
     Hyperspace.Sounds:PlaySoundMix("teleport", 9, false)
 end
@@ -726,14 +726,14 @@ local function DisplacerMaceGeneric(item, crewmem, validDestinations)
     --Get a random enemy in combat in the same room
     if crewmem.bFighting and crewmem.health.first >= 0.1 then
         item.value = item.value + getTickSize(item, crewmem, DISPLACER_MACE_TICK)
-        print("Mace", item.value)
+        --print("Mace", item.value)
         if item.value > 100 then
             item.value = 0
             local enemyCrewSameRoom = lwl.getSameRoomCrew(crewmem, lwl.generateOpposingCrewFilter(crewmem))
             --choose one at random to displace.
             if #enemyCrewSameRoom > 1 then error("GEX Displacer Mace -- Fighting nothing!") end
             local chosenFoe = enemyCrewSameRoom[math.random(#enemyCrewSameRoom)]
-            print("Displacing", chosenFoe:GetName())
+            --print("Displacing", chosenFoe:GetName())
             displaceCrew(chosenFoe, validDestinations)
         end
     end
