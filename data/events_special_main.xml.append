@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FTL>
+
+
+<mod:findName type="event" name="START_BEACON_PREP_OPTIONS">
+	<mod-append:choice  blue="false" lvl="99" max_group="2" req="pilot">
+		<text>Find another crew member.</text>
+		<event name="GEX_NAI_STARTING_CREW">
+			<text>Confident with your new crew, you prepare to continue on your mission.</text>
+			<crewMember amount="1" class="crystal"/>
+			<choice hidden="true">
+				<text>Continue...</text>
+				<event load="START_BEACON_EXPLAIN_LOAD"/>
+			</choice>
+		</event>
+	</mod-append:choice>
+</mod:findName>
+
+<mod:findName type="event" name="START_BEACON_PREP_LOAD">
+	<mod-append:backgroundObject name="GEX_NAI_CHARM_SIGIL">
+		<layer z="0">background</layer>
+		<spawnArea x="740" y="90" w="0" h="0" center="true"/>
+		<anim>naicon_select</anim>
+		<hoverAnim>naicon_select_on</hoverAnim>
+		<inactiveAnim hide="true"/>
+		<tooltip>A sigil of an unknown god that menaces with wisps of void. It bears an engraving: "Does't thou desire difficulty?"
+		
+		Nai mode: Your ship will have 15 hull, and can recruit a crystal instead of a human at the starting beacon. Do you dare come and have a go?  To test your hardness against the scales?</tooltip>
+		<clickAction>
+			<event load="GEX_MASOCHISM_MODE"/>
+			<destroy/>
+		</clickAction>
+	</mod-append:backgroundObject>
+</mod:findName>
+
+<event name="GEX_MASOCHISM_MODE">
+	<text>Time to lock in and lock down.</text>
+	<variable name="GEX_MASOCHISMODE" op="set" val="1"/>
+</event>
+</FTL>
+

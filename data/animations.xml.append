@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FTL>
+
+<animSheet name="naicon_select" w="37" h="27" fw="37" fh="27">CustomUI/nai_wa.png</animSheet>
+<anim name="naicon_select">
+	<sheet>naicon_select</sheet>
+	<desc length="1" x="0" y="0" />
+	<time>1.0</time>
+</anim>
+
+<animSheet name="naicon_select_on" w="37" h="27" fw="37" fh="27">CustomUI/nai_wa_on.png</animSheet>
+<anim name="naicon_select_on">
+	<sheet>naicon_select_on</sheet>
+	<desc length="1" x="0" y="0" />
+	<time>1.0</time>
+</anim>
+
+</FTL>

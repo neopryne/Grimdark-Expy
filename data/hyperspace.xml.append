@@ -3,6 +3,7 @@
 <FTL>
 	<mod:findLike type="scripts">
 		<mod-append:script>data/gex_scripts/gex_crew_equips.lua</mod-append:script>
+		<mod-append:script>data/gex_scripts/clickables.lua</mod-append:script>
 	</mod:findLike>
 	
 	<customTabs enabled="true">
