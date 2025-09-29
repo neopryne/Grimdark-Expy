@@ -767,7 +767,15 @@ local function OvercloakerRemove(item, crewmem)
     crewTable.tickMult = crewTable.tickMult - .5
 end
 
+-------------------Watermelon Hat------------------
+local function WatermelonHatEquip(item, crewmem)
+    --Generate oxygen "like an orchid"
+    item.oxygenBoost = lwsb.addStatBoost(Hyperspace.CrewStat.OXYGEN_CHANGE_SPEED, lwsb.TYPE_NUMERIC, lwsb.ACTION_NUMERIC_ADD, .525, lwl.generateCrewFilterFunction(crewmem))
+end
 
+local function WatermelonHatRemove(item, crewmem)
+    lwsb.removeStatBoost(item.oxygenBoost)
+end
 
 
 
@@ -882,6 +890,7 @@ cel.insertItemDefinition(GENERIC_DISPLACER_MACE_DEFINITION)
 cel.insertItemDefinition(DISPLACER_MACE_DEFINITION)
 cel.insertItemDefinition(CHAOTIC_DISPLACER_MACE_DEFINITION)
 cel.insertItemDefinition({name="Overcloaker", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/overcloaker.png"), description="The supercharged fabric of this cloak fills the space around you with potential, drawing out the latent capabilities of your gear.  Other equipped items on this crew tick at 1.5x speed.", onEquip=OvercloakerEquip, onRemove=OvercloakerRemove})
+cel.insertItemDefinition({name="Watermelon Hat", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/watermelon_hat.png"), description="A symbol of the multiversal intifada, this hat provides oxygen as if its wearer were an orchid. The inscription on it reads: 'Never again means for everyone.'", onEquip=WatermelonHatEquip, onRemove=WatermelonHatRemove})
 --print("numequips after", #mEquipmentGenerationTable)
 
 

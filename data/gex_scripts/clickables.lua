@@ -1,9 +1,7 @@
 local vter = mods.multiverse.vter
 
 local lwl = mods.lightweight_lua
---uh, there might be some things you need to do on load, like setting max hull again.
-
-local fd
+local lwui = mods.lightweight_user_interface
 
 local mGlobal = Hyperspace.Global.GetInstance()
 local mBlueprintManager = mGlobal:GetBlueprints()
@@ -14,11 +12,43 @@ local START_BEACON_EVENT_NAME = "START_BEACON_PREP_OPTIONS"
 local START_CREW_EVENT_NAME = "START_BEACON_PREP_OPTIONS 25"
 local GEX_NAI_MODE_KEY = "GEX_MASOCHISMODE"
 local CRYSTAL_BLUEPRINT = mBlueprintManager:GetCrewBlueprint(CRYSTAL_NAME)
+local mNaiButton
 
-local function activateNaiMode()
-    --set metavar for nai mode.
-    --ship hull max is less.
+local function setNaiMode(mode)
+    if mode then
+        Hyperspace.playerVariables[GEX_NAI_MODE_KEY] = 1
+    else
+        Hyperspace.playerVariables[GEX_NAI_MODE_KEY] = 0
+    end
 end
+
+local function hangarVisibilityFunction()
+    return Hyperspace.ships.player ~= nil and Hyperspace.ships.player.iCustomizeMode == 2
+end
+
+--todo this is a more complex render function that requires three images loaded dynamically.
+local function naiButtonRender()
+    
+end
+
+--mNaiButton = lwui.buildButton(300, 100, 30, 30, lwui.alwaysOnVisibilityFunction, renderFunction, onClick, onRelease)
+
+
+--wither has requested a blood mod and it's really easy.
+--Add the meat popsicle, a clickable that adds blood splatters to the game.  Further iterations would have different bloods for different species.
+--Base kind just has like 7 types of human blood pool that fades over time, aoe2 style.
+--Actually, what I should do is make an options menu for gexpy where you can choose which parts of it to enable.
+--Stored in metavars so it persists always.
+--[[Ok, we're going back to lwui and making these changes.  That means I can also make the changes that are needed for lwcel --that should have been its name --to get rid of its hardcodes.
+anyway, adding a blank menu to lwl, that anything that uses it can append to easilly.
+
+
+
+
+
+
+]]
+
 --todo onload, smash hull if nai.
 
 local mIsInitialized = false
@@ -28,7 +58,7 @@ script.on_internal_event(Defines.InternalEvents.ON_TICK, function()
     if mIsInitialized or (not Hyperspace.ships(0)) or lwl.isPaused() then return end
 
     mIsInitialized = true
-    if Hyperspace.playerVariables[GEX_NAI_MODE_KEY] then
+    if Hyperspace.playerVariables[GEX_NAI_MODE_KEY] > 0 then
         Hyperspace.ships.player.ship.hullIntegrity.second = 15
     end
 end)
