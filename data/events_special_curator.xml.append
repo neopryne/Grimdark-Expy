@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<!-- This replaces the cura drone outright, but I don't think anyone cares. -->
+<ship name="SHIP_CURATOR" auto_blueprint="MU_CURATOR">
+	<escape  max="30" min="30"/>
+    <destroyed load="GEX_CURA_PROBE_DEFEAT" />
+	<destroyed load="DESTROYED_DEFAULT"/>
+	<deadCrew load="DEAD_CREW_DEFAULT"/>
+</ship>
+
+<mod:findName type="event" name="CURA_PROPOSITION">
+    <mod-append:choice >
+		<text>Blow this meddling traveler to shreds.</text>
+		<event>
+			<text>"My assessments regarding the idiocy of renegades were already copiously padded, yet you have managed to outdo them.  This has already been a tremendous waste of my incredibly valuable time, you will not be squandering any more of it."
+            </text>
+			<choice>
+                <text>Continue...</text>
+				<event>
+					<ship hostile="true" />
+					<choice>
+						<text>Continue...</text>	
+						<event load="COMBAT_CHECK" />
+					</choice>
+				</event>
+            </choice>
+		</event>
+    </mod-append:choice>
+</mod:findName>
+
+<event name="GEX_CURA_PROBE_DEFEAT">
+    <text>"...I hope you injure yourself on my scrap."</text>
+    <choice>
+        <text>Continue...</text>
+        <event load="DESTROYED_DEFAULT">
+    </choice>
+</event>
