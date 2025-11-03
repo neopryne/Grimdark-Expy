@@ -32,6 +32,6 @@
     <text>"...I hope you injure yourself on my scrap."</text>
     <choice>
         <text>Continue...</text>
-        <event load="DESTROYED_DEFAULT">
+        <event load="DESTROYED_DEFAULT"/>
     </choice>
 </event>

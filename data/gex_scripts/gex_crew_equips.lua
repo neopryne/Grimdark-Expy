@@ -1,7 +1,9 @@
 if (not mods) then mods = {} end
 local lwl = mods.lightweight_lua
+local lwst = mods.lightweight_stable_time
 local lwui = mods.lightweight_user_interface
 local lwsb = mods.lightweight_statboosts
+local lweb = mods.lightweight_event_broadcaster
 local lwce = mods.lightweight_crew_effects
 local cel = mods.crew_equipment_library
 
@@ -15,6 +17,9 @@ if not cel then
     error("Crew Equipment Library was not patched, or was patched after Grimdark Expy.  Install it properly or face undefined behavior.")
 end
 ----------------------------------------------------DEFINES----------------------
+
+local mGlobal = Hyperspace.Global.GetInstance()
+local mSoundControl = mGlobal:GetSoundControl()
 
 local TYPE_WEAPON = cel.TYPE_WEAPON
 local TYPE_ARMOR = cel.TYPE_ARMOR
@@ -91,7 +96,7 @@ local function ChicagoTypewriter(item, crewmem)
     --bBoostable was already true.  You could do interesting stuff with setting this to false for enemy systems as a minor effect.
     if manningWeapons ~= item.manningWeapons then
         if manningWeapons then
-            Hyperspace.ships.player.weaponSystem:UpgradeSystem(1)
+            Hyperspace.ships.player.weaponSystem:UpgradeSystem(1)--todo this doesn't properly unset when loading, so can leave permanent boosts on close/open.
         else
             Hyperspace.ships.player.weaponSystem:UpgradeSystem(-1)
         end
@@ -668,7 +673,7 @@ local HypercellCrewList = generateHypercellCrewList()
 local function VolatileHypercells(item, crewmem)
     if (crewmem.health.first <= 0.1) then
         crewmem.bDead = false
-        crewmem.health.first = 100
+        crewmem.health.first = 100 --todo other race's max health.  also todo make this not just make ponies.
         local newType = HypercellCrewList[math.random(1, #HypercellCrewList)]
         local transformRace = Hyperspace.StatBoostDefinition()
         transformRace.stat = Hyperspace.CrewStat.TRANSFORM_RACE
@@ -778,7 +783,87 @@ local function WatermelonHatRemove(item, crewmem)
     lwsb.removeStatBoost(item.oxygenBoost)
 end
 
+-------------------Bloodweft Bond Berets------------------
+local bondedCrewList = {}
+local numBonded = 0
+local bondedWarningTriggered = false
+--There's only one group, so I can have these be global variables.
+local function bbbGlobalTick()
+    if numBonded < 2 then return end
+    local sharedHealth = 0
+    local totalMaxHealth = 0
+    for id,_ in pairs(bondedCrewList) do
+        local crewmem = lwl.getCrewById(id)
+        --Average health distributions, each crew should be at the same %.
+        sharedHealth = sharedHealth + crewmem.health.first
+        totalMaxHealth = totalMaxHealth + crewmem.health.second
+    end
+    local currentPercent = sharedHealth / totalMaxHealth
+    if currentPercent < .1 then
+        if not bondedWarningTriggered then
+            bondedWarningTriggered = true
+            mSoundControl:PlaySoundMix("kizuna_warn", 4, false)
+            for id,_ in pairs(bondedCrewList) do
+                local crewmem = lwl.getCrewById(id)
+                Brightness.create_particle("particles/blaring_blood_bond_beacon", 10, 2, crewmem:GetPosition(), math.random(0,360), crewmem.currentShipId, "SHIP_MANAGER")
+            end
+        end
+    else
+        bondedWarningTriggered = false
+    end
 
+    for id,_ in pairs(bondedCrewList) do
+        local crewmem = lwl.getCrewById(id)
+        crewmem.health.first = currentPercent * crewmem.health.second
+    end
+end
+lwst.registerOnTick(bbbGlobalTick, false)
+
+
+local bbbDeathListener = function(crewmem)
+    local mutualDeath = false
+    for id,_ in pairs(bondedCrewList) do
+        if crewmem.extend.selfId == id then
+            mutualDeath = true
+        end
+    end
+    if mutualDeath then
+        for id,_ in pairs(bondedCrewList) do
+            local crew = lwl.getCrewById(id)
+            crew.health.first = -99
+        end
+    end
+end
+lweb.registerDeathAnimationListener(bbbDeathListener)
+
+local function BloodweftBondBeretEquip(item, crewmem)
+    if not bondedCrewList[crewmem.extend.selfId] then
+        numBonded = numBonded + 1
+    end
+    bondedCrewList[crewmem.extend.selfId] = true
+end
+
+local function BloodweftBondBeretRemove(item, crewmem)
+    if bondedCrewList[crewmem.extend.selfId] then
+        numBonded = numBonded - 1
+    end
+    bondedCrewList[crewmem.extend.selfId] = nil
+end
+
+
+local BBB_NAME = "Bloodweft Bond Bandage"
+local BBB_DESCRIPTION = "Strange looking fabric that clings to the skin.  Evenly distributes help and hurt throughout its network. (All crew wearing Bloodweft Bond Bandages share a collective health pool.)"
+local BBB_SPRITE = "items/blood_bond.png"
+
+local function BloodweftBondBeretBundleCreate(item)
+    for i=1,math.random(2,3) do
+        gex_give_item(cel.mNameToItemIndexTable[BBB_NAME])
+    end
+    cel.deleteItem(item.button, item)
+end
+
+local BBB_DEFINITION = {name=BBB_NAME, itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction(BBB_SPRITE), description=BBB_DESCRIPTION, onEquip=BloodweftBondBeretEquip, onRemove=BloodweftBondBeretRemove, secret=true, sellValue=2}
+local BLOODWEFT_BLOOD_BERET_BUNDLE = {name="a bundle of abrupt, angular red mesh", onCreate=BloodweftBondBeretBundleCreate}
 
 --[[
 effects: teleportitis (foes only, this is a pain)
@@ -892,8 +977,9 @@ cel.insertItemDefinition(DISPLACER_MACE_DEFINITION)
 cel.insertItemDefinition(CHAOTIC_DISPLACER_MACE_DEFINITION)
 cel.insertItemDefinition({name="Overcloaker", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/overcloaker.png"), description="The supercharged fabric of this cloak fills the space around you with potential, drawing out the latent capabilities of your gear.  Other equipped items on this crew tick at 1.5x speed.", onEquip=OvercloakerEquip, onRemove=OvercloakerRemove})
 cel.insertItemDefinition({name="Watermelon Hat", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/watermelon_hat.png"), description="A symbol of the multiversal intifada, this hat provides oxygen as if its wearer were an orchid. The inscription on it reads: 'Never again means for everyone.'", onEquip=WatermelonHatEquip, onRemove=WatermelonHatRemove})
---print("numequips after", #mEquipmentGenerationTable)
-
+cel.insertItemDefinition(BBB_DEFINITION)
+cel.insertItemDefinition(BLOODWEFT_BLOOD_BERET_BUNDLE)
+--print("numequips after", #mEquipmentGenerationTable) 
 
 
 
