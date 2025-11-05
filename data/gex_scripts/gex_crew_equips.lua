@@ -497,7 +497,8 @@ local function VoidRingRemove(item, crewmem)
 end
 -------------------Equinoid Tools------------------
 local LIST_CREW_PONY = {"pony", "pony_tamed", "easter_sunkist", "unique_jerry_pony", "ponyc",
- "unique_jerry_pony_crystal", "pony_engi", "pony_engi_chaos", "pony_engi_nano", "pony_engi_nano_chaos", "fr_bonus_prince"}
+    "unique_jerry_pony_crystal", "pony_engi", "pony_engi_chaos", "pony_engi_nano", "pony_engi_nano_chaos", "fr_bonus_prince",
+    "unique_ellie", "unique_ellie_stephan"}
 
 --if conditions are met, destroy these and replace them with their true versions.
 local YOUNG_DEPRESSEOR_NAME = "Strange Lump"
@@ -665,35 +666,133 @@ local EQUINOID_TOOLS_DEFINITION = {name=EQUINOID_TOOLS_NAME, onCreate=EquinoidTo
 
 -------------------Volatile Hypercells------------------
 
-local function generateHypercellCrewList()
-    return {"pony", "pony_engi"} --todo scrape the correct lists, or all crew types.
-end
-local HypercellCrewList = generateHypercellCrewList()
+-- local function compileAllCrewList()
+--     --Go through every list you can think of, some you can't, and scrape the xml if you have to for every instance of a crew definition.
+-- end
+-- lwl.AllCrewList = compileAllCrewList()
+--TODO this is crashing the game if you do multiple shifts, or re-equip, or something.  It's also not destroying itself right, which is probably indicative of other issues.
+local HypercellDescriptions = {}
+--todo it's really slow in the gexpy menu, figure out why that is.
+--todo sometimes gex items aren't ticking at all.  This is bad.
+--It's not playing the sounds, it's not unequipping itself.  Very bad.
 
-local function VolatileHypercells(item, crewmem)
-    if (crewmem.health.first <= 0.1) then
-        crewmem.bDead = false
-        crewmem.health.first = 100 --todo other race's max health.  also todo make this not just make ponies.
-        local newType = HypercellCrewList[math.random(1, #HypercellCrewList)]
-        local transformRace = Hyperspace.StatBoostDefinition()
-        transformRace.stat = Hyperspace.CrewStat.TRANSFORM_RACE
-        transformRace.stringValue = newType
-        transformRace.value = true
-        transformRace.cloneClear = false
-        transformRace.jumpClear = false
-        transformRace.boostType = Hyperspace.StatBoostDefinition_BoostType_SET
-        transformRace.boostSource = Hyperspace.StatBoostDefinition_BoostSource_AUGMENT
-        transformRace.shipTarget = Hyperspace.StatBoostDefinition.ShipTarget.ALL
-        transformRace.crewTarget = Hyperspace.StatBoostDefinition.CrewTarget.ALL
-        Hyperspace.StatBoostManager.GetInstance():CreateTimedAugmentBoost(Hyperspace.StatBoost(transformRace), crewmem)
-        Hyperspace.Sounds:PlaySoundMix("gex_cell_revive", 4, false)
-        Hyperspace.Sounds:PlaySoundMix("gex_vial_break", 4, false)
-        cel.deleteItem(item.button, item)
+local LIST_CREW_PONY_GENERIC = {"pony", "pony_tamed", "ponyc", "pony_engi", "pony_engi_chaos",
+    "pony_engi_nano", "pony_engi_nano_chaos"}
+
+local function hypercellsAllCrew(item, crewmem)
+    --print("all crew:", lwl.dumpObject(lwl.allCrew))
+    return lwl.getRandomValue(lwl.allCrew)
+end
+
+local function hypercellsRaceCurrent(item, crewmem)
+    return crewmem:GetSpecies()
+end
+
+local function hypercellsRacePony(item, crewmem)
+    return lwl.getRandomValue(LIST_CREW_PONY_GENERIC)
+end
+
+local function GenerateHypercellsFunction(raceSelectFunction) --todo this seems to crash the game.  Wonderful.
+    return function (item, crewmem)
+        print(item.name, crewmem.health.first)
+        if (crewmem.health.first <= .3) then--todo tune
+            crewmem.bDead = false
+            --todo other race's max health.  also todo make this not just make ponies.
+            local newType = raceSelectFunction(item, crewmem) --todo probably lwl.allCrew is empty or something.
+            print("newType", newType)
+            local transformRace = Hyperspace.StatBoostDefinition()
+            transformRace.stat = Hyperspace.CrewStat.TRANSFORM_RACE
+            transformRace.stringValue = newType
+            transformRace.value = true
+            transformRace.cloneClear = false
+            transformRace.jumpClear = false
+            transformRace.boostType = Hyperspace.StatBoostDefinition_BoostType_SET
+            transformRace.boostSource = Hyperspace.StatBoostDefinition_BoostSource_AUGMENT
+            transformRace.shipTarget = Hyperspace.StatBoostDefinition.ShipTarget.ALL
+            transformRace.crewTarget = Hyperspace.StatBoostDefinition.CrewTarget.ALL
+            Hyperspace.StatBoostManager.GetInstance():CreateTimedAugmentBoost(Hyperspace.StatBoost(transformRace), crewmem)
+            crewmem.health.first = crewmem.health.second --todo this is crashing when boosted.
+            print("restoring health to", crewmem.health.second, crewmem:GetName())
+            Hyperspace.Sounds:PlaySoundMix("gex_cell_revive", 4, false)
+            Hyperspace.Sounds:PlaySoundMix("gex_vial_break", 4, false)
+            cel.deleteItem(item.button, item)
+            Hyperspace.metaVariables[HypercellDescriptions[item.name].key] = 1
+            print("restoring health setmetavar", crewmem.health.second, crewmem:GetName())
+        end
     end
 end
 
+--todo a lisp in which the only logic is probablistic.
+--[[
+True = 1
+False = 0
+But basically the idea is to force you into writing good/extensible/flexible/concise code by making all things be something that other things can change.
+I initially thought it would be nice if the only object was this probablistic thing, but you do need strings and stuff.
+
+All values have a probability of 1, but you can change that.  If they end up being false, I'm not sure what you do.
+Maybe something like, everything is a wave.  I don't know how to build something that I can interact with out of that.
+
+Rule of 3: never evaluate more than 3 levels of self-recursion.
+
+]]
+
 --Ascendant Hypercells
 --Chaotic Hypercells
+--Sparkle Hypercells
+--rOBOTIC hYPERCELLS
+--Blighted Hypercells (DD, flesh abomination)
+--supremacist (human only), perfected (crewmem:GetSpecies()), 
+---An item that changes crew's race every jump, but only while they hold it.  Chaotic version doesn't revert them when they unequip.
+---Maybe make it so chaotic versions scale their spawn rates with low stability.
+
+--randomize descriptions so they're like potions?
+--no, for now, just have metavars tracking if you've had one of them go off, and that lets you see the true description.
+local VOLATILE_HYPERCELLS_NAME = "Volatile Hypercells"
+local PERFECTED_HYPERCELLS_NAME = "Perfected Hypercells"
+local EQUINOID_HYPERCELLS_NAME = "Equinoid Hypercells"
+--chaotic, robotic, blighted, sparkle, ascendant
+--todo I left the image for this out of everything, TODO commit and add that again.
+
+
+
+local VOLATILE_HYPERCELLS_DEFINITION = {name=VOLATILE_HYPERCELLS_NAME, itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/hypercells.png"), description="You shouldn't see this.", onRender=GenerateHypercellsFunction(hypercellsAllCrew), secret=true}
+local PERFECTED_HYPERCELLS_DEFINITION = {name=PERFECTED_HYPERCELLS_NAME, itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/hypercells.png"), description="You shouldn't see this.", onRender=GenerateHypercellsFunction(hypercellsRaceCurrent), secret=true}
+local EQUINOID_HYPERCELLS_DEFINITION = {name=EQUINOID_HYPERCELLS_NAME, itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/hypercells.png"), description="You shouldn't see this.", onRender=GenerateHypercellsFunction(hypercellsRacePony), secret=true}
+--todo onRender should really run EVERY frame, not just the onTicks.
+--todo LWST, CEL fix this.
+local HYPERCELLS_LIST = {VOLATILE_HYPERCELLS_DEFINITION, PERFECTED_HYPERCELLS_DEFINITION, EQUINOID_HYPERCELLS_DEFINITION}
+
+--todo make clean
+HypercellDescriptions[VOLATILE_HYPERCELLS_NAME] = {key="gex."..VOLATILE_HYPERCELLS_NAME, known="This vial of hyperactive growth substrate shatters on death, regenerating its holder as a random race.", unknown="A vial of quivering green ooze. The label reads: 'In case of emergency, drink glass.'"}
+HypercellDescriptions[PERFECTED_HYPERCELLS_NAME] = {key="gex."..PERFECTED_HYPERCELLS_NAME, known="The apotheosis of decades of research, this vial of hyperactive growth substrate shatters on death, regenerating its holder to perfect health.", unknown="A vial of quivering green ooze. The label reads: 'Insergency Drass.'"}
+HypercellDescriptions[EQUINOID_HYPERCELLS_NAME] = {key="gex."..EQUINOID_HYPERCELLS_NAME, known="This vial of hyperactive growth substrate shatters on death, healing and ponifying the holder.", unknown="A vial of slightly foreboding sparkling pink ooze. The label reads: 'In case of emergency, drink glass.'"}
+for key,descriptions in pairs(HypercellDescriptions) do
+    local matchingDefinition
+    for _,definition in ipairs(HYPERCELLS_LIST) do
+        if definition.name == key then
+            matchingDefinition = definition
+            break
+        end
+    end
+    if not matchingDefinition then
+        error("Missing definition for", key)
+    end
+    if Hyperspace.metaVariables[descriptions.key] == 1 then
+        matchingDefinition.description = descriptions.known
+    else
+        matchingDefinition.description = descriptions.unknown
+    end
+end
+
+local HypercellContainerCreate = function(item)
+    --give random hypercell item --weighted?
+    local newItemName = lwl.getRandomValue(HYPERCELLS_LIST).name
+    gex_give_item(cel.mNameToItemIndexTable[newItemName])
+    cel.deleteItem(item.button, item)
+end
+local HYPERCELL_CONTAINER_NAME = "smooth metal box labeled 'DANGER! EXPERIMENTAL USE ONLY. SAMPLE NUMBER #&~%'  You can't make out the sample number"
+local HYPERCELL_CONTAINER_DEFINITION = {name=HYPERCELL_CONTAINER_NAME, onCreate=HypercellContainerCreate}
+
 -------------------Displacer Mace------------------
 local GENERIC_DISPLACER_MACE_NAME = "mace with intricate aether circuits"
 local DISPLACER_MACE_NAME = "Displacer Mace"
@@ -938,6 +1037,12 @@ Maw Sawge: boosts regen rate of friendly crew in room (1.20)
 using userdata tables for the things that go on characters.
 Inferno Core -- Increases burn speed of fires in the same room.
 
+Hack 2.0:
+Member of the nightfall crew list.
+Spawns controllable, unselectable crew at its locations.  Probably jank, definitely cool.  Maybe better as a foe you fight.
+Might give this one to nai or something, as this is plorble for the player.  Make it very rare to get, as it takes up a bunch
+of room, and move speed is like regen for it.
+
 --]]--45 c cvgbhbhyh bbb
 cel.insertItemDefinition({name="Shredder Cuffs", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/SpikedCuffs.png"), description="Looking sharp.  Extra damage in melee.", onTick=ShredderCuffs, sellValue=3})
 cel.insertItemDefinition({name="Seal Head", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/SealHead.png"), description="The headbutts it enables are an effective counter to the ridicule you might encounter for wearing such odd headgear.", onTick=SealHead})
@@ -971,7 +1076,10 @@ cel.insertItemDefinition(SUN_PILE_DEFINITION)
 cel.insertItemDefinition(MAW_SAWGE_DEFINITION)
 cel.insertItemDefinition(PRONGLER_DEFINITION)
 cel.insertItemDefinition(EQUINOID_TOOLS_DEFINITION)
-cel.insertItemDefinition({name="Volatile Hypercells", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/hypercells.png"), description="This vial of hyperactive growth substrate shatters on death, regenerating its holder as a random race.", onRender=VolatileHypercells})
+cel.insertItemDefinition(VOLATILE_HYPERCELLS_DEFINITION)
+cel.insertItemDefinition(PERFECTED_HYPERCELLS_DEFINITION)
+cel.insertItemDefinition(EQUINOID_HYPERCELLS_DEFINITION)
+cel.insertItemDefinition(HYPERCELL_CONTAINER_DEFINITION)
 cel.insertItemDefinition(GENERIC_DISPLACER_MACE_DEFINITION)
 cel.insertItemDefinition(DISPLACER_MACE_DEFINITION)
 cel.insertItemDefinition(CHAOTIC_DISPLACER_MACE_DEFINITION)
