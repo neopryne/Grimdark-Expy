@@ -1,3 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<kizuna_warn volume="4">health_warn_2.ogg</kizuna_warn>
+<kizuna_warn volume="4">health_warn_2.ogg</kizuna_warn><?xml version="1.0" encoding="UTF-8"?>
+
+<gex_cell_revive volume="5">schlupp.ogg</gex_cell_revive>
+<gex_vial_break volume="5">shatter.ogg</gex_vial_break>

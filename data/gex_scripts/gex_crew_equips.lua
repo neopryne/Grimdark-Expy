@@ -135,14 +135,14 @@ local function PeppyBismolEquip(item, crewmem)
 end
 
 local function PeppyBismolRemove(item, crewmem)
-    lwsb.removeStatBoost(item.appliedBoost)
+    lwsb.removeStatBoostAllowNil(item.appliedBoost)
 end
 -------------------Medkit------------------
 local function MedkitEquip(item, crewmem)
     item.appliedBoost = lwsb.addStatBoost(Hyperspace.CrewStat.MAX_HEALTH, lwsb.TYPE_NUMERIC, lwsb.ACTION_NUMERIC_ADD, 20, lwl.generateCrewFilterFunction(crewmem))
 end
 local function MedkitRemove(item, crewmem)
-    lwsb.removeStatBoost(item.appliedBoost)
+    lwsb.removeStatBoostAllowNil(item.appliedBoost)
 end
 -------------------Graft Armor------------------
 local function GraftArmorEquip(item, crewmem)
@@ -152,8 +152,8 @@ local function GraftArmorEquip(item, crewmem)
 end
 
 local function GraftArmorRemove(item, crewmem)
-    lwsb.removeStatBoost(item.healthBoost)
-    lwsb.removeStatBoost(item.stunBoost)
+    lwsb.removeStatBoostAllowNil(item.healthBoost)
+    lwsb.removeStatBoostAllowNil(item.stunBoost)
     lwce.addResist(crewmem, lwce.KEY_BLEED, -1)
 end
 -------------------It's Terrible!------------------
@@ -257,7 +257,7 @@ local function MyocardialOverchargerEquip(item, crewmem)
 end
 
 local function MyocardialOverchargerRemove(item, crewmem)
-    lwsb.removeStatBoost(item.appliedBoost)
+    lwsb.removeStatBoostAllowNil(item.appliedBoost)
 end
 -------------------Holy Symbol------------------
 local function HolySymbolRender()
@@ -389,7 +389,7 @@ local function CompactifierEquip(item, crewmem)
 end
 
 local function CompactifierRemove(item, crewmem)
-    lwsb.removeStatBoost(item.appliedBoost)
+    lwsb.removeStatBoostAllowNil(item.appliedBoost)
 end
 -------------------INTERNECION CUBE------------------
 local function InternecionCubeEquip(item, crewmem)
@@ -492,8 +492,8 @@ local function VoidRingEquip(item, crewmem)
 end
 
 local function VoidRingRemove(item, crewmem)
-    lwsb.removeStatBoost(item.fightBoost)
-    lwsb.removeStatBoost(item.targetableBoost)
+    lwsb.removeStatBoostAllowNil(item.fightBoost)
+    lwsb.removeStatBoostAllowNil(item.targetableBoost)
 end
 -------------------Equinoid Tools------------------
 local LIST_CREW_PONY = {"pony", "pony_tamed", "easter_sunkist", "unique_jerry_pony", "ponyc",
@@ -607,10 +607,10 @@ local function YoungDepressorEquip(item, crewmem)
 end
 
 local function YoungDepressorRemove(item, crewmem)
-    lwsb.removeStatBoost(item.stunBoost)
-    lwsb.removeStatBoost(item.mindBoost)
-    lwsb.removeStatBoost(item.fightBoost)
-    lwsb.removeStatBoost(item.damageResistBoost)
+    lwsb.removeStatBoostAllowNil(item.stunBoost)
+    lwsb.removeStatBoostAllowNil(item.mindBoost)
+    lwsb.removeStatBoostAllowNil(item.fightBoost)
+    lwsb.removeStatBoostAllowNil(item.damageResistBoost)
     lwce.addResist(crewmem, lwce.KEY_CONFUSION, -1)
 end
 
@@ -621,8 +621,8 @@ local function SunPileEquip(item, crewmem)
 end
 
 local function SunPileRemove(item, crewmem)
-    lwsb.removeStatBoost(item.doorbustBoost)
-    lwsb.removeStatBoost(item.fireResistBoost)
+    lwsb.removeStatBoostAllowNil(item.doorbustBoost)
+    lwsb.removeStatBoostAllowNil(item.fireResistBoost)
 end
 -------------------Maw Sawge------------------
 local function MawSawgeEquip(item, crewmem)
@@ -631,7 +631,7 @@ local function MawSawgeEquip(item, crewmem)
 end
 
 local function MawSawgeRemove(item, crewmem)
-    lwsb.removeStatBoost(item.healBoost)
+    lwsb.removeStatBoostAllowNil(item.healBoost)
 end
 -------------------Prongler------------------
 local function PronglerEquip(item, crewmem)
@@ -640,7 +640,7 @@ local function PronglerEquip(item, crewmem)
 end
 
 local function PronglerRemove(item, crewmem)
-    lwsb.removeStatBoost(item.moveBoost)
+    lwsb.removeStatBoostAllowNil(item.moveBoost)
 end
 
 local STRANGE_LUMP_DEFINITION = {name=YOUNG_DEPRESSEOR_NAME, itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction(YOUNG_DEPRESSEOR_SPRITE), description=STRANGE_LUMP_DESCRIPTION, onEquip=StrangeLumpEquip, onTick=StrangeLump, sellValue=3, secret=true}
@@ -1051,8 +1051,8 @@ cel.insertItemDefinition({name="Ballancator", itemType=TYPE_ARMOR, renderFunctio
 cel.insertItemDefinition({name="Hellion Halberd", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/halberd.png"), description="A vicious weapon that leaves its victems with gaping wounds that bleed profusely.", onTick=HellionHalberd})
 cel.insertItemDefinition({name="Peppy Bismol", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/peppy_bismol.png"), description="'With Peppy Bismol, nothing will be able to keep you down!'  Increases active ability charge rate.", onEquip=PeppyBismolEquip, onRemove=PeppyBismolRemove})
 cel.insertItemDefinition({name="Medkit", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/medkit.png"), description="Packed full of what whales you.  +20 max health.", onEquip=MedkitEquip, onRemove=MedkitRemove})
-cel.insertItemDefinition({name="Organic Impulse Grafts", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/graft_armor.png"), description="Quickly rights abnormal status conditions. +5 max health, bleed immunity, 50% stun resist.", onEquip=GraftArmorEquip, onRemove=GraftArmorRemove})
-cel.insertItemDefinition({name="Testing Status Tool", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/Untitled.png"), description="ALL OF THEM!!!  A complicated-looking device that inflicts its wearer with all manner of ill effects.  Thankfully, someone else wants it more than you do.", onTick=statusTest, onEquip=statusTestEquip, onRemove=statusTestRemove, sellValue=15})
+cel.insertItemDefinition({name="Organic Impulse Grafts", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/graft_armor.png"), description="Quickly rights abnormal status conditions. +5 max health, bleed immunity, 50% stun resist.", onTick=GraftArmor, onEquip=GraftArmorEquip, onRemove=GraftArmorRemove})
+cel.insertItemDefinition({name="Testing Status Tool", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/Untitled.png"), description="ALL OF THEM!!!  A complicated-looking device that inflicts its wearer with all manner of ill effects.  Thankfully, someone else wants it more than you do.", onTick=statusTest, onEquip=statusTestEquip, onRemove=statusTestRemove, sellValue=15, secret=true})
 cel.insertItemDefinition({name="Omelas Generator", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/leaves_of_good_fortune.png"), description="Power, at any cost.  Equiped crew adds four ship power but slowly stacks corruption.", onTick=OmelasGenerator, onEquip=OmelasGeneratorEquip, onRemove=OmelasGeneratorRemove})
 cel.insertItemDefinition({name="Ferrogenic Exsanguinator", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/grafted.png"), description="'The machine god requires a sacrifice of blood, and I give it gladly.'  Biomechanical tendrils wrap around this crew, extracting their life force to hasten repairs.", onTick=FerrogenicExsanguinator})
 cel.insertItemDefinition({name="Egg", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/egg.png"), description="Gains 3 sell value at the end of the round.", onTick=Egg, onLoad=loadEgg, onPersist=persistEgg, sellValue=0})
