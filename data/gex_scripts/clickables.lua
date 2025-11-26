@@ -47,8 +47,8 @@ lwui.addTopLevelObject(mHelpTextBox, "MOUSE_CONTROL_PRE")
 
 --We don't get this for free, so we have to add it outselves.
 script.on_internal_event(Defines.InternalEvents.ON_TICK, function()
-    if lwui.mHoveredButton then
-        if lwui.mHoveredButton.naiModeHelpButton then
+    if lwui.mHoveredObject then
+        if lwui.mHoveredObject.naiModeHelpButton then
             mRenderHelp = true
             return
         end

@@ -2,7 +2,7 @@
   <title><![CDATA[ Grimdark Expy]]></title>
   <threadUrl><![CDATA[https://github.com/neopryne/Grimdark-Expy/tree/main]]></threadUrl>
   <author><![CDATA[ Limrix ]]></author>
-  <version><![CDATA[ 0.7 ]]></version>
+  <version><![CDATA[ 1.4 ]]></version>
   <description>
 <![CDATA[
 # Grimdark-Expy
@@ -14,7 +14,7 @@ Add some pizzaz with over 20 items to play with in a new menu tab.
 Thanks to Nai for help with equipment icons!
 
 ### Requirements:
-[Crew Equipment Library](https://github.com/neopryne/FTL-Crew-Equipment-Library) 0.4+
+[Crew Equipment Library](https://github.com/neopryne/FTL-Crew-Equipment-Library) 0.10+
 ]]>
   </description>
 </metadata>

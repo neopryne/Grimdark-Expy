@@ -916,7 +916,7 @@ local function bbbGlobalTick()
         crewmem.health.first = currentPercent * crewmem.health.second
     end
 end
-lwst.registerOnTick(bbbGlobalTick, false)
+lwst.registerOnTick("gex_bbbGlobalTick", bbbGlobalTick, false)
 
 
 local bbbDeathListener = function(crewmem)
