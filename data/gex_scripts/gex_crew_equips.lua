@@ -1036,9 +1036,7 @@ local function ScrapHarm(item, crewmem)
 end
 --#endregion
 --[[
-effects: teleportitis (foes only, this is a pain)
-        slimed? (slow, reduce damage given) (I actually really like this one.)
-        polymorphitis
+effects:polymorphitis --Once I figure out how to make multiple race stat boosts not crash the game
         heartache?
 
 Volatile Hypercells: uses 
@@ -1046,7 +1044,6 @@ Volatile Hypercells: uses
 Wait that thing bliz was talking about doens't work for this.
 Upon reaching 0 hp, consume this item to regenerate as a random race.
 LIST_CREW_ALL_CRAPBUCKET union
-Normal item: Hypercell Selector
 Chaotic Hypercells --Uses LIST_CREW_UNIQUE_CRAPBUCKET or LIST_CREW_ALL_CRAPBUCKET
 Super chaos: Uses every race, even the summons.
 
@@ -1060,14 +1057,12 @@ A crew that has a list of all crew they've killed, and will transform into them 
 todo persist status effects on crewe
 Torpor Projector 
 Determination -- Getting hit charges your abilities.
-Inflatable muscles -- armor while about 1/3 health, extra damage
 Medbot Injector -- armor, Health recharge passive
 
 An active that gives you a random amount of teleportitis.
 
 Cursed equipment that turns your crew into a lump of rocks. \hj
 Interface Scrambler -- Removes manning bonus from all enemy systems and prevents them from being manned.
-    Or like, corruption% chance you don't revive.  5 corruption is already kind of a lot of damage.
 Holy Symbol: [hand grenade, (), hl2 logo, random objects]
 A fun thing might look at how many effects are on a given crew.  It should be easy to get the list of effects on a given crew.  PRetty sure it is as written.
   30% system resist to the room you're in
@@ -1088,13 +1083,41 @@ living bomb
 Violent Artist
 Besplator
 I need a number for how many ticks are in a second.
-Items just generally tick faster (armor)
-Overclocker -- +movespeed (dud), faster item rate on equipped guy.
+
+Library for text effects, with a list of text effects, like rainbow and trans text like qud has.  Arc made some, but people haven't libraried it yet.
 
 Item: User Manual
-    Creates one of several user manuals on create, destroys itself.  These are tools that give the user one extra level of skill, statbuff needed.
+    Creates one of several user manuals on create, destroys itself.  These are consumables? that give the user one extra level of skill.
+    They all have the same image, but different descriptions.
 
 Giftbox: lots of things!  No sell value, but might give you stuff when it dies...
+Confounding Crate: Spawns with a  Give it to a crew to work on opening.
+Crates have a number of attributes:
+    The locking mechanism.  This can be one of:
+        A random chance to open each jump
+        A set number (some crew are better at seeing this than others?)
+        A specific unlock condition that must be met
+    The contents
+            It actually figures out what it's going to give you when it spawns, and that determines things like time till open
+            Each type of contents has a different randomization method of figuring out what it's going to give you, and each lock takes the total value and does something with it.
+        1-3 random items
+        holy shit it's a guy
+        loot (v high value)
+        augments?
+    A set of modifiers:
+        Transparent: you can see what's inside
+        Opulent: worth more, and if you open it you can sell the box.
+        Cursed: Triggers a curse effect when opened.  Opening it inflicts lots of Corrupted on the crew that opened it, or triggers a gnome effect, or turns into a curse item that you can't remove.
+        Ghostly: 
+        Noxious: drains hp while equipped
+        Charged: one bar of zoltan power, but also occasionally ions the current room.
+        Rusty: easier to open, some of the internals have decayed to scrap.  You get told what's unsalvageable.
+        Unsettling: lowers your stability when opened.
+        Booby-trapped: 
+        Haunted: Chases your crew around the ship
+
+
+
 An item that stacks with itself when you place it on itself... Render func's going to be hard for that one...
 Maybe it gets brighter each level?  A thing that you feed other things to power it up...
 
@@ -1104,7 +1127,7 @@ Young Depressor: Crew gains MC immunity.
 Maw Sawge: boosts regen rate of friendly crew in room (1.20)
 
 using userdata tables for the things that go on characters.
-Inferno Core -- Increases burn speed of fires in the same room.
+Inferno Core -- Tool, Fire immunity, Increases burn speed of fires in the same room.
 
 Hack 2.0:
 Member of the nightfall crew list.
