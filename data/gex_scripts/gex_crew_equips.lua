@@ -210,8 +210,10 @@ local function FerrogenicExsanguinator(item, crewmem)
         local currentShipManager = Hyperspace.ships(crewmem.currentShipId)
         local systemId = crewmem.iManningId
         local system = currentShipManager:GetSystem(systemId)
-        system:PartialRepair(getTickSize(item, crewmem, 12.5), false)
-        lwce.applyBleed(crewmem, getTickSize(item, crewmem, 3.2))
+        if not (system == nil) then --This can happen with custom systems
+            system:PartialRepair(getTickSize(item, crewmem, 12.5), false)
+            lwce.applyBleed(crewmem, getTickSize(item, crewmem, 3.2))
+        end
     end
 end
 --#endregion
@@ -734,12 +736,12 @@ end
 
 local function GenerateHypercellsFunction(raceSelectFunction) --todo this seems to crash the game.  Wonderful.
     return function (item, crewmem)
-        print(item.name, crewmem.health.first)
+        --print(item.name, crewmem.health.first)
         if (crewmem.health.first <= .3) then--todo tune
             crewmem.bDead = false
             --todo other race's max health.  also todo make this not just make ponies.
             local newType = raceSelectFunction(item, crewmem) --todo probably lwl.allCrew is empty or something.
-            print("newType", newType)
+            lwl.logInfo(TAG, "newType "..newType)
             local transformRace = Hyperspace.StatBoostDefinition()
             transformRace.stat = Hyperspace.CrewStat.TRANSFORM_RACE
             transformRace.stringValue = newType
@@ -752,12 +754,12 @@ local function GenerateHypercellsFunction(raceSelectFunction) --todo this seems 
             transformRace.crewTarget = Hyperspace.StatBoostDefinition.CrewTarget.ALL
             Hyperspace.StatBoostManager.GetInstance():CreateTimedAugmentBoost(Hyperspace.StatBoost(transformRace), crewmem)
             crewmem.health.first = crewmem.health.second --todo this is crashing when boosted.
-            print("restoring health to", crewmem.health.second, crewmem:GetName())
+            --print("restoring health to", crewmem.health.second, crewmem:GetName())
             Hyperspace.Sounds:PlaySoundMix("gex_cell_revive", 4, false)
             Hyperspace.Sounds:PlaySoundMix("gex_vial_break", 4, false)
             cel.deleteItem(item.button, item)
             Hyperspace.metaVariables[HypercellDescriptions[item.name].key] = 1
-            print("restoring health setmetavar", crewmem.health.second, crewmem:GetName())
+            --print("restoring health setmetavar", crewmem.health.second, crewmem:GetName())
         end
     end
 end
@@ -877,7 +879,7 @@ local function DisplacerMaceGeneric(item, crewmem, validDestinations)
             item.value = 0
             local enemyCrewSameRoom = lwl.getSameRoomCrew(crewmem, lwl.generateOpposingCrewFilter(crewmem))
             --choose one at random to displace.
-            if #enemyCrewSameRoom > 1 then error("GEX Displacer Mace -- Fighting nothing!") end
+            if #enemyCrewSameRoom < 1 then lwl.logError(TAG, "GEX Displacer Mace -- Fighting nothing!") end
             local chosenFoe = enemyCrewSameRoom[math.random(#enemyCrewSameRoom)]
             --print("Displacing", chosenFoe:GetName())
             displaceCrew(chosenFoe, validDestinations)
@@ -928,7 +930,7 @@ end
 --#endregion
 --#region Bloodweft Bond Berets
 -------------------Bloodweft Bond Berets------------------
-local bondedCrewList = {}
+local mBondedCrewList = {}
 local numBonded = 0
 local bondedWarningTriggered = false
 --There's only one group, so I can have these be global variables.
@@ -936,18 +938,23 @@ local function bbbGlobalTick()
     if numBonded < 2 then return end
     local sharedHealth = 0
     local totalMaxHealth = 0
-    for id,_ in pairs(bondedCrewList) do
+    for id,_ in pairs(mBondedCrewList) do
         local crewmem = lwl.getCrewById(id)
+        if crewmem.bDead then
+            --Kick out dead crew
+            mBondedCrewList[crewmem.extend.selfId] = nil
+        else
+            sharedHealth = sharedHealth + crewmem.health.first
+            totalMaxHealth = totalMaxHealth + crewmem.health.second
+        end
         --Average health distributions, each crew should be at the same %.
-        sharedHealth = sharedHealth + crewmem.health.first
-        totalMaxHealth = totalMaxHealth + crewmem.health.second
     end
     local currentPercent = sharedHealth / totalMaxHealth
     if currentPercent < .1 then
         if not bondedWarningTriggered then
             bondedWarningTriggered = true
             mSoundControl:PlaySoundMix("kizuna_warn", 4, false)
-            for id,_ in pairs(bondedCrewList) do
+            for id,_ in pairs(mBondedCrewList) do
                 local crewmem = lwl.getCrewById(id)
                 Brightness.create_particle("particles/blaring_blood_bond_beacon", 10, 2, crewmem:GetPosition(), math.random(0,360), crewmem.currentShipId, "SHIP_MANAGER")
             end
@@ -956,7 +963,7 @@ local function bbbGlobalTick()
         bondedWarningTriggered = false
     end
 
-    for id,_ in pairs(bondedCrewList) do
+    for id,_ in pairs(mBondedCrewList) do
         local crewmem = lwl.getCrewById(id)
         crewmem.health.first = currentPercent * crewmem.health.second
     end
@@ -966,13 +973,13 @@ lwst.registerOnTick("gex_bbbGlobalTick", bbbGlobalTick, false)
 
 local bbbDeathListener = function(crewmem)
     local mutualDeath = false
-    for id,_ in pairs(bondedCrewList) do
-        if crewmem.extend.selfId == id then
+    for id,_ in pairs(mBondedCrewList) do
+        if crewmem.extend.selfId == id and not crewmem.bDead then
             mutualDeath = true
         end
     end
     if mutualDeath then
-        for id,_ in pairs(bondedCrewList) do
+        for id,_ in pairs(mBondedCrewList) do
             local crew = lwl.getCrewById(id)
             crew.health.first = -99
         end
@@ -981,17 +988,17 @@ end
 lweb.registerDeathAnimationListener(bbbDeathListener)
 
 local function BloodweftBondBeretEquip(item, crewmem)
-    if not bondedCrewList[crewmem.extend.selfId] then
+    if not mBondedCrewList[crewmem.extend.selfId] then
         numBonded = numBonded + 1
     end
-    bondedCrewList[crewmem.extend.selfId] = true
+    mBondedCrewList[crewmem.extend.selfId] = true
 end
 
 local function BloodweftBondBeretRemove(item, crewmem)
-    if bondedCrewList[crewmem.extend.selfId] then
+    if mBondedCrewList[crewmem.extend.selfId] then
         numBonded = numBonded - 1
     end
-    bondedCrewList[crewmem.extend.selfId] = nil
+    mBondedCrewList[crewmem.extend.selfId] = nil
 end
 
 
@@ -1035,6 +1042,21 @@ local function ScrapHarm(item, crewmem)
     item.lastSeenScrap = currentScrap
 end
 --#endregion
+
+
+--#region Red Tearstone Ring
+local function attackBoost(crewmem)
+    local fifthHealth = crewmem.health.first / 5
+    --scale up to 50% damage at 20% health.
+end
+--#endregion
+
+--#region Inferno Core
+
+
+
+--#endregion
+
 --[[
 effects:polymorphitis --Once I figure out how to make multiple race stat boosts not crash the game
         heartache?
@@ -1108,32 +1130,22 @@ Crates have a number of attributes:
         Transparent: you can see what's inside
         Opulent: worth more, and if you open it you can sell the box.
         Cursed: Triggers a curse effect when opened.  Opening it inflicts lots of Corrupted on the crew that opened it, or triggers a gnome effect, or turns into a curse item that you can't remove.
-        Ghostly: 
+        Ghostly: Crew opening it cannot be targeted.
         Noxious: drains hp while equipped
         Charged: one bar of zoltan power, but also occasionally ions the current room.
         Rusty: easier to open, some of the internals have decayed to scrap.  You get told what's unsalvageable.
         Unsettling: lowers your stability when opened.
-        Booby-trapped: 
+        Booby-trapped: May deal hull damage when opened, (will check and use crew's interfacing stat if this exists), else 70% chance of failure.
         Haunted: Chases your crew around the ship
-
 
 
 An item that stacks with itself when you place it on itself... Render func's going to be hard for that one...
 Maybe it gets brighter each level?  A thing that you feed other things to power it up...
 
-Prongler: slows enemy crew in same room
-Sun Pile: tool, 2x door break speed
-Young Depressor: Crew gains MC immunity.
-Maw Sawge: boosts regen rate of friendly crew in room (1.20)
 
 using userdata tables for the things that go on characters.
 Inferno Core -- Tool, Fire immunity, Increases burn speed of fires in the same room.
-
-Hack 2.0:
-Member of the nightfall crew list.
-Spawns controllable, unselectable crew at its locations.  Probably jank, definitely cool.  Maybe better as a foe you fight.
-Might give this one to nai or something, as this is plorble for the player.  Make it very rare to get, as it takes up a bunch
-of room, and move speed is like regen for it.
+RTSR -- Attack buff that scales with %missing health.
 
 A lot of programming is saying, "how can I do this but like that instead?" in the smallest possible semantic structure.
 
@@ -1187,6 +1199,12 @@ print("Item distribution:", lwl.dumpObject(cel.itemTypeDistribution))
 --print("numequips after", #mEquipmentGenerationTable) 
 --#endregion
 
+
+script.on_init(function(newGame)
+    if newGame then
+        mBondedCrewList = {}
+    end
+end)
 
 
 ------------------------------------END ITEM DEFINITIONS----------------------------------------------------------
