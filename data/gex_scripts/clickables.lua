@@ -122,11 +122,3 @@ LI systems: ablative armor (shields), ion thing (battery), infusions (med/cloneb
 ---Lily's additions has code to check the ship systems, check that
 ---todo add map ship icons to all the ships I made
 
-
-
-
-
-
-
-
-

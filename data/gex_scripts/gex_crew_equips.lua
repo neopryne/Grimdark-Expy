@@ -7,20 +7,22 @@ local lweb = mods.lightweight_event_broadcaster
 local lwce = mods.lightweight_crew_effects
 local cel = mods.crew_equipment_library
 local cels = mods.crew_equipment_library_slots
+mods.grimdark_equipment = {}
+local gex = mods.grimdark_equipment
 
 local Brightness = mods.brightness
 local get_room_at_location = mods.multiverse.get_room_at_location
 local userdata_table = mods.multiverse.userdata_table
 
+local TAG = "mods.grimdark_equipment"
 --As library, needs to reject things with duplicate names, pop error. lib in lwl, GEXPy uses lib and adds the items.
 --I probably need to hash out custom persist stuff first.
 if not cel then
     error("Crew Equipment Library was not patched, or was patched after Grimdark Expy.  Install it properly or face undefined behavior.")
 end
-----------------------------------------------------DEFINES----------------------
 
-local mGlobal = Hyperspace.Global.GetInstance()
-local mSoundControl = mGlobal:GetSoundControl()
+----------------------------------------------------DEFINES----------------------
+local mSoundControl = Hyperspace.Global.GetInstance():GetSoundControl()
 
 local TYPE_WEAPON = cels.TYPE_WEAPON
 local TYPE_ARMOR = cels.TYPE_ARMOR
@@ -32,7 +34,7 @@ local TYPE_TOOL = cels.TYPE_TOOL
 ---@param item table
 ---@param crewmem Hyperspace.CrewMember
 ---@param doOnJump function Takes (item, crewmem)
-local function onJump(item, crewmem, doOnJump)
+function gex.onJump(item, crewmem, doOnJump)
     if item.jumping and not Hyperspace.ships(0).bJumping then
         doOnJump(item, crewmem)
     end
@@ -40,7 +42,7 @@ local function onJump(item, crewmem, doOnJump)
 end
 
 
-local function getTickSize(item, crewmem, baseValue)
+function gex.scaleEffect(item, crewmem, baseValue)
     local crewTable = userdata_table(crewmem, "mods.gex.crew_modifiers")
     crewTable.tickMult = lwl.setIfNil(crewTable.tickMult, 1)
     return baseValue * crewTable.tickMult
@@ -58,7 +60,7 @@ local function ShredderCuffs(item, crewmem)
         local foeShipManager = Hyperspace.ships(1)
         local foes_at_point = lwl.get_ship_crew_point(ownshipManager, foeShipManager, crewmem.x, crewmem.y)
         for _,foe in ipairs(foes_at_point) do
-            foe:DirectModifyHealth(getTickSize(item, crewmem, -.05))
+            foe:DirectModifyHealth(gex.scaleEffect(item, crewmem, -.05))
         end
     end
 end
@@ -70,7 +72,7 @@ local function SealHead(item, crewmem)
         item.stunCounter = 0
     end
     if crewmem.bFighting and crewmem.bSharedSpot then
-        item.stunCounter = item.stunCounter + getTickSize(item, crewmem, .005)
+        item.stunCounter = item.stunCounter + gex.scaleEffect(item, crewmem, .005)
         if (item.stunCounter > 1) then
             item.stunCounter = 0
             local ownshipManager = Hyperspace.ships(0)
@@ -112,7 +114,7 @@ end
 --#region BALLANCEATOR
 -------------------BALLANCEATOR------------------
 local function Ballanceator(item, crewmem)
-    local dpt = getTickSize(item, crewmem, .185)
+    local dpt = gex.scaleEffect(item, crewmem, .185)
     if (crewmem:GetIntegerHealth() > crewmem:GetMaxHealth() / 2) then
         crewmem:DirectModifyHealth(-dpt)
     else
@@ -127,7 +129,7 @@ local function HellionHalberd(item, crewmem)
         --foes_at_point = lwl.get_ship_crew_point(ownshipManager, foeShipManager, crewmem.x, crewmem.y) --coords are relative to the first manager.
         --foes_at_point = lwl.getFoesAtPoint(crewmem, crewmem.x, crewmem.y) --this is actually harder to implement as it involves converting points in mainspace to one of the ships.
         for _,foe in ipairs(lwl.getFoesAtSelf(crewmem)) do
-            lwce.applyBleed(foe, getTickSize(item, crewmem, 21))
+            lwce.applyBleed(foe, gex.scaleEffect(item, crewmem, 21))
         end
     end
 end
@@ -176,9 +178,9 @@ local function statusTestEquip(item, crewmem)
 end
 local function statusTest(item, crewmem)
     --print("test tool tick", getTickSize(item, crewmem, 1))
-    lwce.applyBleed(crewmem, getTickSize(item, crewmem, 1))
-    lwce.applyConfusion(crewmem, getTickSize(item, crewmem, 1))
-    lwce.applyTeleportitis(crewmem, getTickSize(item, crewmem, 1))
+    lwce.applyBleed(crewmem, gex.scaleEffect(item, crewmem, 1))
+    lwce.applyConfusion(crewmem, gex.scaleEffect(item, crewmem, 1))
+    lwce.applyTeleportitis(crewmem, gex.scaleEffect(item, crewmem, 1))
     --lwce.applyCorruption(crewmem, .1)
 end
 local function statusTestRemove(item, crewmem)
@@ -194,7 +196,7 @@ local function OmelasGeneratorEquip(item, crewmem) --mAYBE MAKE THIS CURSED.  Al
 end
 
 local function OmelasGenerator(item, crewmem)
-    lwce.applyCorruption(crewmem, getTickSize(item, crewmem, .006))
+    lwce.applyCorruption(crewmem, gex.scaleEffect(item, crewmem, .006))
 end
 
 local function OmelasGeneratorRemove(item, crewmem)
@@ -211,8 +213,8 @@ local function FerrogenicExsanguinator(item, crewmem)
         local systemId = crewmem.iManningId
         local system = currentShipManager:GetSystem(systemId)
         if not (system == nil) then --This can happen with custom systems
-            system:PartialRepair(getTickSize(item, crewmem, 12.5), false)
-            lwce.applyBleed(crewmem, getTickSize(item, crewmem, 3.2))
+            system:PartialRepair(gex.scaleEffect(item, crewmem, 12.5), false)
+            lwce.applyBleed(crewmem, gex.scaleEffect(item, crewmem, 3.2))
         end
     end
 end
@@ -231,12 +233,12 @@ local function persistEgg(item, metaVarIndex)
 end
 
 local function EggOnJump(item, crewmem)
-    item.sellValue = item.sellValue + getTickSize(item, crewmem, 3)
+    item.sellValue = item.sellValue + gex.scaleEffect(item, crewmem, 3)
     cel.persistEquipment()
 end
 
 local function Egg(item, crewmem)
-    onJump(item, crewmem, EggOnJump)
+    gex.onJump(item, crewmem, EggOnJump)
 end
 --#endregion
 --#region Myocardial Overcharger
@@ -269,15 +271,16 @@ local function MyocardialOverchargerCreate(item)
 end
 
 local function MyocardialOverchargerRender(item, crewmem)
-    item.sellValue = math.floor(6 + (item.valueFunction() / 5))
+    item.sellValue = item.itemsSold
 end
 
 local function MyocardialOverchargerEquip(item, crewmem)
-    item.appliedBoost = lwsb.addStatBoost(Hyperspace.CrewStat.MAX_HEALTH, lwsb.TYPE_NUMERIC, lwsb.ACTION_NUMERIC_ADD, item.valueFunction, lwl.generateCrewFilterFunction(crewmem))
+    local filterFunction = lwl.generateCrewFilterFunction(crewmem)
+    item.healthBoost = lwsb.addStatBoost(Hyperspace.CrewStat.MAX_HEALTH, lwsb.TYPE_NUMERIC, lwsb.ACTION_NUMERIC_ADD, item.valueFunction, filterFunction)
 end
 
 local function MyocardialOverchargerRemove(item, crewmem)
-    lwsb.removeStatBoostAllowNil(item.appliedBoost)
+    lwsb.removeStatBoostAllowNil(item.healthBoost)
 end
 --#endregion
 --#region Holy Symbol
@@ -368,7 +371,7 @@ local function InterfangilatorRemoveEffect(item, crewmem)
 end
 
 local function InterfangilatorCommonCore(item, crewmem, strength)
-    onJump(item, crewmem, function (item, crewmem)
+    gex.onJump(item, crewmem, function (item, crewmem)
         item.ready = true
         item.systemId = nil
     end)
@@ -439,7 +442,7 @@ local function InternecionCube(item, crewmem)
         item.description = IC_on_TEXT
     end
     
-    item.value = item.value + getTickSize(item, crewmem, (.24 + ((murderMultiplier - 1) / 3)))
+    item.value = item.value + gex.scaleEffect(item, crewmem, (.24 + ((murderMultiplier - 1) / 3)))
     if item.value > 100 then
         item.value = 0
         if crewmem.health.first < crewmem.health.second then
@@ -449,7 +452,7 @@ local function InternecionCube(item, crewmem)
     end
 
     if crewmem.bFighting then
-        lwl.damageEnemyCrewInSameRoom(crewmem, getTickSize(item, crewmem,.07 * murderMultiplier), 0) --lwl might have issues if crew tag along after a jump todo fix?
+        lwl.damageEnemyCrewInSameRoom(crewmem, gex.scaleEffect(item, crewmem,.07 * murderMultiplier), 0) --lwl might have issues if crew tag along after a jump todo fix?
         --todo damage everyone, increase heal.
     end
 end
@@ -607,19 +610,19 @@ local function HookishStaffEquip(item, crewmem)
 end
 
 local function StrangeLump(item, crewmem)
-    onJump(item, crewmem, StrangeLumpOnJump)
+    gex.onJump(item, crewmem, StrangeLumpOnJump)
 end
 
 local function KnobblyMound(item, crewmem)
-    onJump(item, crewmem, KnobblyMoundOnJump)
+    gex.onJump(item, crewmem, KnobblyMoundOnJump)
 end
 
 local function ToothyPlank(item, crewmem)
-    onJump(item, crewmem, ToothyPlankOnJump)
+    gex.onJump(item, crewmem, ToothyPlankOnJump)
 end
 
 local function HookishStaff(item, crewmem)
-    onJump(item, crewmem, HookishStaffOnJump)
+    gex.onJump(item, crewmem, HookishStaffOnJump)
 end
 
 local YOUNG_DEPRESSEOR_SPRITE = "items/equinoid_tools_1.png"
@@ -873,7 +876,7 @@ end
 local function DisplacerMaceGeneric(item, crewmem, validDestinations)
     --Get a random enemy in combat in the same room
     if crewmem.bFighting and crewmem.health.first >= 0.1 then
-        item.value = item.value + getTickSize(item, crewmem, DISPLACER_MACE_TICK)
+        item.value = item.value + gex.scaleEffect(item, crewmem, DISPLACER_MACE_TICK)
         --print("Mace", item.value)
         if item.value > 100 then
             item.value = 0
@@ -1044,112 +1047,7 @@ end
 --#endregion
 
 
---#region Red Tearstone Ring
-local function attackBoost(crewmem)
-    local fifthHealth = crewmem.health.first / 5
-    --scale up to 50% damage at 20% health.
-end
---#endregion
 
---#region Inferno Core
-
-
-
---#endregion
-
---[[
-effects:polymorphitis --Once I figure out how to make multiple race stat boosts not crash the game
-        heartache?
-
-Volatile Hypercells: uses 
---how to get dynamic list of all crew types in the game
-Wait that thing bliz was talking about doens't work for this.
-Upon reaching 0 hp, consume this item to regenerate as a random race.
-LIST_CREW_ALL_CRAPBUCKET union
-Chaotic Hypercells --Uses LIST_CREW_UNIQUE_CRAPBUCKET or LIST_CREW_ALL_CRAPBUCKET
-Super chaos: Uses every race, even the summons.
-
-
-Items that make themselves not secret when the correct addons are installed:
-    Spell Jam
-    This refreshing snack allows an additional use of any equipped spells.
-    (actually just gives vampweed cultists an additional charge to all abilities.)
-A crew that has a list of all crew they've killed, and will transform into them upon death.
-
-todo persist status effects on crewe
-Torpor Projector 
-Determination -- Getting hit charges your abilities.
-Medbot Injector -- armor, Health recharge passive
-
-An active that gives you a random amount of teleportitis.
-
-Cursed equipment that turns your crew into a lump of rocks. \hj
-Interface Scrambler -- Removes manning bonus from all enemy systems and prevents them from being manned.
-Holy Symbol: [hand grenade, (), hl2 logo, random objects]
-A fun thing might look at how many effects are on a given crew.  It should be easy to get the list of effects on a given crew.  PRetty sure it is as written.
-  30% system resist to the room you're in
-Galpegar
-Noctus
-The Thunderskin  --Crew cannot fight and gains 100 health. When in a room with injured allies, bleeds profusely and heals them.  Needs statboost for the cannot fight probably.
-The Sun in Rags
-A cursed item that autoequips
-Item that get stronger the more items you sell.
---todo item onLoad onPersist methods for things that need to save stuff
-Blood is Mine, something else I forgot for art assets
-FTF Discette
-Right Eye of Argupel
-A collection of the latest tracks from backwater bombshell Futanari Titwhore Fiasco
-crew gets for each equiped crew
-equipped crew get for each equipment on them
-living bomb
-Violent Artist
-Besplator
-I need a number for how many ticks are in a second.
-
-Library for text effects, with a list of text effects, like rainbow and trans text like qud has.  Arc made some, but people haven't libraried it yet.
-
-Item: User Manual
-    Creates one of several user manuals on create, destroys itself.  These are consumables? that give the user one extra level of skill.
-    They all have the same image, but different descriptions.
-
-Giftbox: lots of things!  No sell value, but might give you stuff when it dies...
-Confounding Crate: Spawns with a  Give it to a crew to work on opening.
-Crates have a number of attributes:
-    The locking mechanism.  This can be one of:
-        A random chance to open each jump
-        A set number (some crew are better at seeing this than others?)
-        A specific unlock condition that must be met
-    The contents
-            It actually figures out what it's going to give you when it spawns, and that determines things like time till open
-            Each type of contents has a different randomization method of figuring out what it's going to give you, and each lock takes the total value and does something with it.
-        1-3 random items
-        holy shit it's a guy
-        loot (v high value)
-        augments?
-    A set of modifiers:
-        Transparent: you can see what's inside
-        Opulent: worth more, and if you open it you can sell the box.
-        Cursed: Triggers a curse effect when opened.  Opening it inflicts lots of Corrupted on the crew that opened it, or triggers a gnome effect, or turns into a curse item that you can't remove.
-        Ghostly: Crew opening it cannot be targeted.
-        Noxious: drains hp while equipped
-        Charged: one bar of zoltan power, but also occasionally ions the current room.
-        Rusty: easier to open, some of the internals have decayed to scrap.  You get told what's unsalvageable.
-        Unsettling: lowers your stability when opened.
-        Booby-trapped: May deal hull damage when opened, (will check and use crew's interfacing stat if this exists), else 70% chance of failure.
-        Haunted: Chases your crew around the ship
-
-
-An item that stacks with itself when you place it on itself... Render func's going to be hard for that one...
-Maybe it gets brighter each level?  A thing that you feed other things to power it up...
-
-
-using userdata tables for the things that go on characters.
-Inferno Core -- Tool, Fire immunity, Increases burn speed of fires in the same room.
-RTSR -- Attack buff that scales with %missing health.
-
-A lot of programming is saying, "how can I do this but like that instead?" in the smallest possible semantic structure.
-
---]]--45 c cvgbhbhyh bbb
 --#region Item Definition Insertions
 cel.insertItemDefinition({name="Shredder Cuffs", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/SpikedCuffs.png"), description="Looking sharp.  Extra damage in melee.", onTick=ShredderCuffs, sellValue=3})
 cel.insertItemDefinition({name="Seal Head", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/SealHead.png"), description="The headbutts it enables are an effective counter to the ridicule you might encounter for wearing such odd headgear.", onTick=SealHead})
@@ -1157,13 +1055,13 @@ cel.insertItemDefinition({name="Chicago Typewriter", itemType=TYPE_TOOL, renderF
 cel.insertItemDefinition({name="Ballancator", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/Ballancator.png"), description="As all things should be.  \nStrives to keep its wearer at exactly half health.", onTick=Ballanceator})
 cel.insertItemDefinition({name="Hellion Halberd", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/halberd.png"), description="A vicious weapon that leaves its victems with gaping wounds that bleed profusely.", onTick=HellionHalberd})
 cel.insertItemDefinition({name="Peppy Bismol", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/peppy_bismol.png"), description="'With Peppy Bismol, nothing will be able to keep you down!'  \nIncreases active ability charge rate.", onEquip=PeppyBismolEquip, onRemove=PeppyBismolRemove})
-cel.insertItemDefinition({name="Medkit", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/medkit.png"), description="Packed full of what whales you.  +20 max health.", onEquip=MedkitEquip, onRemove=MedkitRemove})
+cel.insertItemDefinition({name="Medkit", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/medkit.png"), description="Packed full of what whales you.  \n+20 max health.", onEquip=MedkitEquip, onRemove=MedkitRemove})
 cel.insertItemDefinition({name="Organic Impulse Grafts", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/graft_armor.png"), description="Quickly rights abnormal status conditions. +5 max health, bleed immunity, 50% stun resist.", onTick=GraftArmor, onEquip=GraftArmorEquip, onRemove=GraftArmorRemove})
 cel.insertItemDefinition({name="Testing Status Tool", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/Untitled.png"), description="ALL OF THEM!!!  \nA complicated-looking device that inflicts its wearer with all manner of ill effects.  Thankfully, someone else wants it more than you do.", onTick=statusTest, onEquip=statusTestEquip, onRemove=statusTestRemove, sellValue=15, secret=true})
 cel.insertItemDefinition({name="Omelas Generator", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/leaves_of_good_fortune.png"), description="Power, at any cost.  \nEquipped crew adds four ship power but slowly stacks corruption.", onTick=OmelasGenerator, onEquip=OmelasGeneratorEquip, onRemove=OmelasGeneratorRemove})
 cel.insertItemDefinition({name="Ferrogenic Exsanguinator", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/grafted.png"), description="'The machine god requires a sacrifice of blood, and I give it gladly.'  \nBiomechanical tendrils wrap around this crew, extracting their life force to hasten repairs.", onTick=FerrogenicExsanguinator})
 cel.insertItemDefinition({name="Egg", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/egg.png"), description="Gains 3 sell value at the end of the round.", onTick=Egg, onLoad=loadEgg, onPersist=persistEgg, sellValue=0})
-cel.insertItemDefinition({name="Myocardial Overcharger", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/brain_gang.png"), description="Grows in power with each item sold.", onCreate=MyocardialOverchargerCreate, onLoad=loadMyocardialOvercharger, onPersist=persistMyocardialOvercharger, onRender=MyocardialOverchargerRender, onEquip=MyocardialOverchargerEquip, onRemove=MyocardialOverchargerRemove})
+cel.insertItemDefinition({name="Myocardial Overcharger", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/brain_gang.png"), description="Grows in power with each item sold.\nIncreases crew health and move speed by 5x sell value.", onCreate=MyocardialOverchargerCreate, onLoad=loadMyocardialOvercharger, onPersist=persistMyocardialOvercharger, onRender=MyocardialOverchargerRender, onEquip=MyocardialOverchargerEquip, onRemove=MyocardialOverchargerRemove})
 cel.insertItemDefinition({name="Holy Symbol", itemType=TYPE_WEAPON, renderFunction=HolySymbolRender(), description="Renders its wearer nigh impervious to corruption (Not the DD kind).", onEquip=HolySymbolEquip, onRemove=HolySymbolRemove, sellValue=10})
 cel.insertItemDefinition({name="Interfangilator", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/detector.png"), description="Attaches to the frequency signatures of matching enemy system rooms and inhibits them, reducing them by a bar. [If you quit when an enemy system is red, this breaks your save.]", onRender=Interfangilator, onRemove=InterfangilatorRemove, onLoad=InterfangilatorLoad, onPersist=InterfangilatorPersist})
 cel.insertItemDefinition({name="Custom Interfangilator", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/custom_detector.png"), description="Their expertise becomes their sword, and enemy systems fall. An aftermarket model which scales based on the crew's skill level with the current system. [If you quit when an enemy system is red, this breaks your save.]", onRender=CustomInterfangilator, onRemove=InterfangilatorRemove, onLoad=InterfangilatorLoad, onPersist=InterfangilatorPersist})
@@ -1195,7 +1093,6 @@ cel.insertItemDefinition({name="Watermelon Hat", itemType=TYPE_ARMOR, renderFunc
 cel.insertItemDefinition(BBB_DEFINITION)
 cel.insertItemDefinition(BLOODWEFT_BLOOD_BERET_BUNDLE)
 cel.insertItemDefinition({name="Wagie Cage", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/wage_cage.png"), description="This diabolical contraption pushes your crew to their absolute breaking point to collect every last bit of scrap they possibly can, sacrificing their health in the process, both mental and physical.  Ethical?  Heavens no.  Effective?  You bet your grandma's saucepans.\n10% scrap gain but equipped crew bleed and may revolt when gaining scrap.", onTick=ScrapHarm, onEquip=ScrapHarmEquip, onRemove=ScrapHarmRemove})
-print("Item distribution:", lwl.dumpObject(cel.itemTypeDistribution))
 --print("numequips after", #mEquipmentGenerationTable) 
 --#endregion
 
