@@ -637,8 +637,8 @@ local HOOKISH_STAFF_DESCRIPTION = "It could be something like a coatrack, if you
 
 local YOUNG_DEPRESSEOR_DESCRIPTION = "Placed on rambunctious foals to calm them down. Equipped crew gains 60% damage resist, immunity to stun, mind control, and confusion, and can't fight."
 local SUN_PILE_DESCRIPTION = "Absorbs sunlight and gets really hot.  Also tells time poorly.  Equipped crew breaks doors twice as fast and gains 50% fire resist."
-local MAW_SAWGE_DESCRIPTION = "A nice treat after a long day on your hooves, the Maw Sawge allows equinoids to apply pressure to hard-to-reach spots."
-local PRONGLER_DESCRIPTION = "Get prongled."
+local MAW_SAWGE_DESCRIPTION = "A nice treat after a long day on your hooves, the Maw Sawge allows equinoids to apply pressure to hard-to-reach spots.\nAllies in the same room get increased healing."
+local PRONGLER_DESCRIPTION = "Get prongled.\nSlows foes in the same room."
 
 -------------------Young Depressor------------------
 local function YoungDepressorEquip(item, crewmem)
@@ -766,6 +766,7 @@ local function GenerateHypercellsFunction(raceSelectFunction) --todo this seems 
         end
     end
 end
+--todo this is failing to remove itself.  find out why.
 
 --todo a lisp in which the only logic is probablistic.
 --[[
@@ -1081,15 +1082,15 @@ cel.insertItemDefinition(SUN_PILE_DEFINITION)
 cel.insertItemDefinition(MAW_SAWGE_DEFINITION)
 cel.insertItemDefinition(PRONGLER_DEFINITION)
 cel.insertItemDefinition(EQUINOID_TOOLS_DEFINITION)
-cel.insertItemDefinition(VOLATILE_HYPERCELLS_DEFINITION)
-cel.insertItemDefinition(PERFECTED_HYPERCELLS_DEFINITION)
-cel.insertItemDefinition(EQUINOID_HYPERCELLS_DEFINITION)
-cel.insertItemDefinition(HYPERCELL_CONTAINER_DEFINITION)
+-- cel.insertItemDefinition(VOLATILE_HYPERCELLS_DEFINITION)
+-- cel.insertItemDefinition(PERFECTED_HYPERCELLS_DEFINITION)
+-- cel.insertItemDefinition(EQUINOID_HYPERCELLS_DEFINITION)
+-- cel.insertItemDefinition(HYPERCELL_CONTAINER_DEFINITION)
 cel.insertItemDefinition(GENERIC_DISPLACER_MACE_DEFINITION)
 cel.insertItemDefinition(DISPLACER_MACE_DEFINITION)
 cel.insertItemDefinition(CHAOTIC_DISPLACER_MACE_DEFINITION)
 cel.insertItemDefinition({name="Overcloaker", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/overcloaker.png"), description="The supercharged fabric of this cloak fills the space around you with potential, drawing out the latent capabilities of your gear.  Other equipped items on this crew tick at 1.5x speed.", onEquip=OvercloakerEquip, onRemove=OvercloakerRemove})
-cel.insertItemDefinition({name="Watermelon Hat", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/watermelon_hat.png"), description="A symbol of the multiversal intifada, this hat provides oxygen as if its wearer were an orchid. The inscription on it reads: 'Never again means for everyone.'", onEquip=WatermelonHatEquip, onRemove=WatermelonHatRemove})
+cel.insertItemDefinition({name="Watermelon Hat", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/watermelon_hat.png"), description="A symbol of the multiversal intifada, this hat provides oxygen as if its wearer were an orchid. The inscription on it reads: 'Never again, for anyone.'", onEquip=WatermelonHatEquip, onRemove=WatermelonHatRemove})
 cel.insertItemDefinition(BBB_DEFINITION)
 cel.insertItemDefinition(BLOODWEFT_BLOOD_BERET_BUNDLE)
 cel.insertItemDefinition({name="Wagie Cage", itemType=TYPE_ARMOR, renderFunction=lwui.spriteRenderFunction("items/wage_cage.png"), description="This diabolical contraption pushes your crew to their absolute breaking point to collect every last bit of scrap they possibly can, sacrificing their health in the process, both mental and physical.  Ethical?  Heavens no.  Effective?  You bet your grandma's saucepans.\n10% scrap gain but equipped crew bleed and may revolt when gaining scrap.", onTick=ScrapHarm, onEquip=ScrapHarmEquip, onRemove=ScrapHarmRemove})

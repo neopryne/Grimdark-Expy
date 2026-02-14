@@ -50,8 +50,8 @@ Push-Location $ftlmanDir
     "Multiverse 5.5 - Assets (Patch above Data).zip" `
     "Multiverse 5.5 - Data.zip" `
     "Vertex-Util.ftl" `
-	"Brightness Particles 1.4.1.zip" `
-	"Lightweight Lua.zip" `
+	"Brightness_Particles.zip" `
+	"Lightweight_Lua.zip" `
     "Crew_Equipment_Library.zip" `
     "Fusion.zip" `
     $relativeFile
