@@ -42,7 +42,7 @@ local function generateAttackBoostFunction(crewmem)
     return function()
         --scale up to 50% damage at 20% health.
         local healthFraction = crewmem.health.first / crewmem.health.second
-        local boost = .625 - (.625 * healthFraction)
+        local boost = .625 * (1 - healthFraction)
         boost = math.min(.5, boost)
         return 1 + boost
     end
@@ -56,15 +56,12 @@ end
 local function RtsrRemove(item, crewmem)
     lwsb.removeStatBoostAllowNil(item.damageBoost)
 end
-local RED_TEARSTONE_RING_DEFINITION = {name="Red Tearstone Ring", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/rtsr.png"), description="A small ring, with a brilliant red gem.  Said to provide aid in times of need.\nBoosts attack scaling with missing health, up to a 50% increase at 20% health.", onEquip=RtsrEquip, onRemove=RtsrRemove}
+local RED_TEARSTONE_RING_DEFINITION = {name="Red Tearstone Ring", itemType=TYPE_TOOL, renderFunction=lwui.spriteRenderFunction("items/rtsr.png"), description="A small ring with a brilliant red gem.  Said to provide aid in times of need.\nBoosts attack scaling with missing health, up to a 50% increase at 20% health.", onEquip=RtsrEquip, onRemove=RtsrRemove}
 
 --#endregion
 
 --#region Inferno Core
-local fireImage
-if mods.fusion then
-    fireImage = Hyperspace.Resources:GetImageId("custom_fires/inferno_flames.png")
-end
+local fireImage = Hyperspace.Resources:GetImageId("custom_fires/inferno_flames.png")
 
 --TODO popup an image of the item(s) you get when you get them.  Have a queue of items to show and do it in order like steam achivements.  Plus a bit of background.
 --Maybe a name.
@@ -105,7 +102,7 @@ local function InfernoCoreRemove(item, crewmem)
     lwsb.removeStatBoostAllowNil(item.fireResistBoost)
 end
 
-local INFERNO_CORE_DEFINITION = {name="Inferno Core", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/inferno_core.png"), description="An ancient glowing orb, cool to the touch, wild, but crafted with care. --Burn; Not up, not out.\nGrants complete fire resistance and expedites nearby flames.", onEquip=InfernoCoreEquip, onRemove=InfernoCoreRemove, onTick=InfernoCore}
+local INFERNO_CORE_DEFINITION = {name="Inferno Core", itemType=TYPE_WEAPON, renderFunction=lwui.spriteRenderFunction("items/inferno_core.png"), description="An ancient glowing orb, cool to the touch, wild, but crafted with care. --Burn; Not up, not out.\nGrants complete fire resistance and expedites nearby flames.", onEquip=InfernoCoreEquip, onRemove=InfernoCoreRemove, onRender=InfernoCore}
 --#endregion
 --#region Strange Present
 -------------------Strange Present------------------
