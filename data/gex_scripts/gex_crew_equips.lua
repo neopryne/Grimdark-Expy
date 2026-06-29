@@ -1104,19 +1104,24 @@ script.on_init(function(newGame)
     end
 end)
 
-
 ------------------------------------END ITEM DEFINITIONS----------------------------------------------------------
 --todo doesn't work with anything that has multiple possible results.
 if cel.addGuaranteedItemEvent then --backcompat with old library versions
     --cel.addGuaranteedItemEvent("DROPPOINT_CRAZYZOLTAN_PAY", cel.ITEM_ANY)
     --cel.addGuaranteedItemEvent("DROPPOINT_CACHE_OPEN", cel.ITEM_ANY)
-    cel.addGuaranteedItemEvent("DROPPOINT_BULKY_SMUGGLER_HACK", cel.ITEM_ANY)
-    cel.addGuaranteedItemEvent("S1_ZOLTAN_SHIELD_SEND_REPAIR", cel.ITEM_ANY)
-    cel.addGuaranteedItemEvent("DROPPOINT_SHIP_TOXIN_FLUSHED", cel.ITEM_ANY)
-    cel.addGuaranteedItemEvent("DROPPOINT_ESCAPE_POD_QUEST", cel.ITEM_ANY)
-    cel.addGuaranteedItemEvent("DROPPOINT_SUPPLY_DEPOT_SHORTAGE_FUEL", cel.ITEM_ANY)
-    cel.addGuaranteedItemEvent("DROPPOINT_SUPPLY_DEPOT_SHORTAGE_MISSILES", cel.ITEM_ANY)
-    cel.addGuaranteedItemEvent("DROPPOINT_SUPPLY_DEPOT_SHORTAGE_DRONES", cel.ITEM_ANY)
+    --cel.addGuaranteedItemEvent("DROPPOINT_BULKY_SMUGGLER_HACK", cel.ITEM_ANY, "\nThey give you a trinket for your troubles.")
+    --cel.addGuaranteedItemEvent("S1_ZOLTAN_SHIELD_SEND_REPAIR", cel.ITEM_ANY)
+    cel.addGuaranteedItemEvent("DROPPOINT_SHIP_TOXIN_FLUSHED", cel.ITEM_ANY, " He fishes in his pocket, and pulls out a contraption. \"I've been puzzling about how to sell this, maybe you can find a use for it.\"")
+    cel.addGuaranteedItemEvent("DROPPOINT_ESCAPE_POD_QUEST", cel.ITEM_ANY, " They also gift you a gadget they made in their previous universe.")
+    cel.addGuaranteedItemEvent("DROPPOINT_SUPPLY_DEPOT_SHORTAGE_FUEL", cel.ITEM_ANY, " And an item.")
+    cel.addGuaranteedItemEvent("DROPPOINT_SUPPLY_DEPOT_SHORTAGE_MISSILES", cel.ITEM_ANY, " And an item.")
+    cel.addGuaranteedItemEvent("DROPPOINT_SUPPLY_DEPOT_SHORTAGE_DRONES", cel.ITEM_ANY, " And an item.")
+    cel.addGuaranteedItemEvent("CURA_PROPOSITION", cel.ITEM_ANY, " Meanwhile, please entertain yourselves with these objects, I have been informed Renegades just love this kind of thing.\"")
+    cel.addGuaranteedItemEvent("CURA_PROPOSITION", cel.ITEM_ANY)
+    cel.addGuaranteedItemEvent("CURA_SUCCESS_EASY", cel.ITEM_ANY, " \"Your insistance on childish tasks surprises even me.  Perhaps I should give you some toys...\"")
+    cel.addGuaranteedItemEvent("CURA_SUCCESS_EASY", cel.ITEM_ANY)
+    cel.addGuaranteedItemEvent("CURA_SUCCESS_MEDIUM", cel.ITEM_ANY, " \"As a token of my tentative approval and perennial generosity, you may have this as well.\"")
+    cel.addGuaranteedItemEvent("SYLVAN_STANDARD", EQUINOID_TOOLS_NAME, " Producing something from his pocket, he smiles.  \"I have ssssome particularly unussssual goods right now. I apologisssse that I cannot ssssell them to you, per agreement, but I think you might find thissss one interessssting.\"")
 else
     error("Warning: old crew equipment library version, GEX will not add guaranteed event items.")
 end
