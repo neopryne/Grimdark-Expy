@@ -1121,7 +1121,7 @@ if cel.addGuaranteedItemEvent then --backcompat with old library versions
     cel.addGuaranteedItemEvent("CURA_SUCCESS_EASY", cel.ITEM_ANY, " \"Your insistance on childish tasks surprises even me.  Perhaps I should give you some toys...\"")
     cel.addGuaranteedItemEvent("CURA_SUCCESS_EASY", cel.ITEM_ANY)
     cel.addGuaranteedItemEvent("CURA_SUCCESS_MEDIUM", cel.ITEM_ANY, " \"As a token of my tentative approval and perennial generosity, you may have this as well.\"")
-    cel.addGuaranteedItemEvent("SYLVAN_STANDARD", EQUINOID_TOOLS_NAME, " Producing something from his pocket, he smiles.  \"I have ssssome particularly unussssual goods right now. I apologisssse that I cannot ssssell them to you, per agreement, but I think you might find thissss one interessssting.\"")
+    cel.addGuaranteedItemEvent("SYLVAN_STANDARD", cel.ITEM_ANY, " Producing something from his pocket, he smiles.  \"I have ssssome particularly unussssual goods right now. I apologisssse that I cannot ssssell them to you, per agreement, but I think you might find thissss one interessssting.\"")
 else
     error("Warning: old crew equipment library version, GEX will not add guaranteed event items.")
 end
